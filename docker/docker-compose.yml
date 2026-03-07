@@ -236,7 +236,7 @@ services:
   # Continuum Platform Services
   # ========================================
   continuum-api-server:
-    image: ghcr.io/roushan65/continuum/continuum-api-server:${CONTINUUM_API_SERVER_VERSION}
+    image: ghcr.io/projectcontinuum/continuum/continuum-api-server:${CONTINUUM_API_SERVER_VERSION}
     container_name: continuum-api-server
     ports:
       - "8080:8080"
@@ -258,7 +258,7 @@ services:
     restart: unless-stopped
 
   continuum-message-bridge:
-    image: ghcr.io/roushan65/continuum/continuum-message-bridge:${CONTINUUM_MESSAGE_BRIDGE_VERSION}
+    image: ghcr.io/projectcontinuum/continuum/continuum-message-bridge:${CONTINUUM_MESSAGE_BRIDGE_VERSION}
     container_name: continuum-message-bridge
     ports:
       - "8081:8080"
