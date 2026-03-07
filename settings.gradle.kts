@@ -1,4 +1,4 @@
-rootProject.name = "continuum-feature-template"
+rootProject.name = "continuum-feature-ai"
 
-include(":features:continuum-feature-example")
+include("features:continuum-feature-unsloth")
 include(":worker")

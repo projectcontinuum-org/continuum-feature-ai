@@ -5,8 +5,10 @@ plugins {
     `maven-publish`
 }
 
-group = "com.continuum.feature.example"
-version = "0.0.1"
+group = "com.continuum.feature.unsloth"
+val baseVersion = "0.0.1"
+val isRelease = System.getenv("IS_RELEASE_BUILD")?.toBoolean() ?: false
+version = if (isRelease) baseVersion else "$baseVersion-SNAPSHOT"
 
 java {
     toolchain {
@@ -17,41 +19,34 @@ java {
 repositories {
     mavenCentral()
     maven {
-        name = "ContinuumGitHubPackages"
-        url = uri("https://maven.pkg.github.com/projectcontinuum/continuum")
-        credentials {
-            username = System.getenv("GITHUB_USER") ?: ""
-            password = System.getenv("GITHUB_TOKEN") ?: ""
-        }
+      name = "ContinuumGitHubPackages"
+      url = uri("https://maven.pkg.github.com/projectcontinuum/continuum")
+      credentials {
+        username = System.getenv("GITHUB_USER") ?: ""
+        password = System.getenv("GITHUB_TOKEN") ?: ""
+      }
     }
 }
 
 dependencies {
     // Spring Boot dependencies
     implementation("org.springframework.boot:spring-boot-starter")
-    implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("org.springframework.boot:spring-boot-starter-web")
-    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-autoconfigure")
 
     // Kotlin dependencies
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
-    // Continuum Commons (from GitHub Packages)
+    // Project dependencies
     implementation("com.continuum.core:continuum-commons:0.0.1")
 
     // Jackson dependencies
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.2")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
-    implementation("com.fasterxml.jackson.core:jackson-core:2.18.2")
-
-    // Logging
-    implementation("org.slf4j:slf4j-api:2.0.12")
 
     // Test dependencies
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    testImplementation("org.mockito.kotlin:mockito-kotlin:5.3.1")
 }
 
 dependencyManagement {
@@ -91,9 +86,11 @@ publishing {
             name = "GitHubPackages"
             url = uri("https://maven.pkg.github.com/$repoName")
             credentials {
-                username = System.getenv("GITHUB_USER") ?: ""
-                password = System.getenv("GITHUB_TOKEN") ?: ""
+                username = System.getenv("MAVEN_REPO_USERNAME")
+                password = System.getenv("MAVEN_REPO_PASSWORD")
             }
         }
     }
 }
+
+
