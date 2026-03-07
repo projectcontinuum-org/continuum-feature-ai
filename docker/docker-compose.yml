@@ -1,0 +1,289 @@
+services:
+  # ========================================
+  # Temporal (Workflow Orchestration)
+  # ========================================
+  postgresql:
+    container_name: temporal-postgresql
+    environment:
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_USER: temporal
+    image: postgres:${POSTGRESQL_VERSION}
+    networks:
+      - temporal-network
+    ports:
+      - 35432:5432
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  temporal:
+    container_name: temporal
+    depends_on:
+      - postgresql
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgresql
+      - DYNAMIC_CONFIG_FILE_PATH=/etc/temporal/config/dynamicconfig/development-sql.yaml
+    image: temporalio/auto-setup:${TEMPORAL_VERSION}
+    networks:
+      - temporal-network
+    ports:
+      - 7233:7233
+    volumes:
+      - ./temporal/dynamicconfig:/etc/temporal/config/dynamicconfig
+    restart: unless-stopped
+
+  temporal-admin-tools:
+    container_name: temporal-admin-tools
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CLI_ADDRESS=temporal:7233
+    image: temporalio/admin-tools:${TEMPORAL_ADMINTOOLS_VERSION}
+    networks:
+      - temporal-network
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+  temporal-search-attributes-init:
+    container_name: temporal-search-attributes-init
+    depends_on:
+      temporal:
+        condition: service_started
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CLI_ADDRESS=temporal:7233
+    image: temporalio/admin-tools:${TEMPORAL_ADMINTOOLS_VERSION}
+    networks:
+      - temporal-network
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for Temporal server to be ready..."
+        max_attempts=30
+        attempt=0
+        until temporal operator cluster health 2>/dev/null | grep -q "SERVING"; do
+          attempt=$((attempt + 1))
+          if [ $$attempt -ge $$max_attempts ]; then
+            echo "Temporal server did not become ready in time, exiting..."
+            exit 1
+          fi
+          echo "Temporal not ready yet (attempt $$attempt/$$max_attempts), waiting..."
+          sleep 5
+        done
+        echo "Temporal cluster is healthy. Waiting for default namespace..."
+        until temporal operator namespace describe default > /dev/null 2>&1; do
+          echo "Default namespace not ready yet, waiting..."
+          sleep 3
+        done
+        echo "Temporal is ready. Creating search attributes..."
+        temporal operator search-attribute create --name "Continuum:ExecutionStatus" --type Int || true
+        temporal operator search-attribute create --name "Continuum:WorkflowFileName" --type Keyword || true
+        echo "Search attributes created successfully!"
+    restart: "no"
+
+  temporal-ui:
+    container_name: temporal-ui
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    image: temporalio/ui:${TEMPORAL_UI_VERSION}
+    networks:
+      - temporal-network
+    ports:
+      - 38081:8080
+    restart: unless-stopped
+
+  # ========================================
+  # Mosquitto (MQTT Broker)
+  # ========================================
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    ports:
+      - 31883:1883
+      - 31884:1884
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - mosquitto-log:/mosquitto/log
+      - mosquitto-data:/mosquitto/data
+    restart: unless-stopped
+
+  # ========================================
+  # Kafka (Event Streaming)
+  # ========================================
+  kafka1:
+    image: confluentinc/cp-kafka:latest
+    ports:
+      - "39092:39092"
+    user: root
+    environment:
+      KAFKA_LISTENERS: BROKER://:19092,EXTERNAL://:39092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: BROKER://kafka1:19092,EXTERNAL://${DOCKER_HOST_IP:-127.0.0.1}:39092
+      KAFKA_INTER_BROKER_LISTENER_NAME: BROKER
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,BROKER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_PROCESS_ROLES: 'controller,broker'
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:9093,2@kafka2:9093,3@kafka3:9093'
+      TOPIC_AUTO_CREATE: "true"
+      KAFKA_CONFLUENT_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CLUSTER_ID: 'ILFgVkHSQceRTtSEDPN7cQ'
+    volumes:
+      - kafka-data-1:/var/lib/kafka/data
+    restart: unless-stopped
+
+  kafka2:
+    image: confluentinc/cp-kafka:latest
+    ports:
+      - "39093:39093"
+    user: root
+    environment:
+      KAFKA_LISTENERS: BROKER://:19092,EXTERNAL://:39093,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: BROKER://kafka2:19092,EXTERNAL://${DOCKER_HOST_IP:-127.0.0.1}:39093
+      KAFKA_INTER_BROKER_LISTENER_NAME: BROKER
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,BROKER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_PROCESS_ROLES: 'controller,broker'
+      KAFKA_NODE_ID: 2
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:9093,2@kafka2:9093,3@kafka3:9093'
+      TOPIC_AUTO_CREATE: "true"
+      KAFKA_CONFLUENT_SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      CLUSTER_ID: 'ILFgVkHSQceRTtSEDPN7cQ'
+    volumes:
+      - kafka-data-2:/var/lib/kafka/data
+    restart: unless-stopped
+
+  kafka3:
+    image: confluentinc/cp-kafka:latest
+    ports:
+      - "39094:39094"
+    user: root
+    environment:
+      KAFKA_LISTENERS: BROKER://:19092,EXTERNAL://:39094,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: BROKER://kafka3:19092,EXTERNAL://${DOCKER_HOST_IP:-127.0.0.1}:39094
+      KAFKA_INTER_BROKER_LISTENER_NAME: BROKER
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,BROKER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_PROCESS_ROLES: 'controller,broker'
+      KAFKA_NODE_ID: 3
+      TOPIC_AUTO_CREATE: "true"
+      KAFKA_CONFLUENT_SCHEMA_REGISTRY_URL: http://schema-registry:8080
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:9093,2@kafka2:9093,3@kafka3:9093'
+      CLUSTER_ID: 'ILFgVkHSQceRTtSEDPN7cQ'
+    volumes:
+      - kafka-data-3:/var/lib/kafka/data
+    restart: unless-stopped
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.2.2
+    hostname: schema-registry
+    container_name: schema-registry
+    ports:
+      - "38080:8080"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka1:19092,PLAINTEXT://kafka2:19092,PLAINTEXT://kafka3:19092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8080
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+    restart: unless-stopped
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    ports:
+      - "38082:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: LOCAL_SPRING_CLOUD
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: PLAINTEXT://kafka1:19092,PLAINTEXT://kafka2:19092,PLAINTEXT://kafka3:19092
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: PLAINTEXT
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8080
+    depends_on:
+      - schema-registry
+      - kafka1
+      - kafka2
+      - kafka3
+    restart: unless-stopped
+
+  # ========================================
+  # MinIO (S3-Compatible Object Storage)
+  # ========================================
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "39000:9000"
+      - "39001:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - temporal-network
+    restart: unless-stopped
+
+  # ========================================
+  # Continuum Platform Services
+  # ========================================
+  continuum-api-server:
+    image: ghcr.io/roushan65/continuum/continuum-api-server:${CONTINUUM_API_SERVER_VERSION}
+    container_name: continuum-api-server
+    ports:
+      - "8080:8080"
+    environment:
+      TEMPORAL_SERVER_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      CONTINUUM_STORAGE_TYPE: minio
+      CONTINUUM_MINIO_ENDPOINT: http://minio:9000
+      CONTINUUM_MINIO_USERNAME: minioadmin
+      CONTINUUM_MINIO_PASSWORD: minioadmin
+      CONTINUUM_CACHE_BUCKET_NAME: continuum-worker-storage
+      CONTINUUM_CACHE_BUCKET_REGION: us-east-2
+      CONTINUUM_CACHE_BUCKET_BASE_PATH: workflow-data
+    depends_on:
+      - temporal
+      - minio
+    networks:
+      - temporal-network
+    restart: unless-stopped
+
+  continuum-message-bridge:
+    image: ghcr.io/roushan65/continuum/continuum-message-bridge:${CONTINUUM_MESSAGE_BRIDGE_VERSION}
+    container_name: continuum-message-bridge
+    ports:
+      - "8081:8080"
+    environment:
+      CONTINUUM_KAFKA_MAIN_BROKER_LIST: kafka1:19092,kafka2:19092,kafka3:19092
+      CONTINUUM_KAFKA_MAIN_SCHEMA_REGISTRY: http://schema-registry:8080
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+      - mosquitto
+    restart: unless-stopped
+
+networks:
+  temporal-network:
+    driver: bridge
+    name: temporal-network
+
+volumes:
+  postgresql-data:
+    driver: local
+  mosquitto-log:
+    driver: local
+  mosquitto-data:
+  kafka-data-1:
+  kafka-data-2:
+  kafka-data-3:
+  minio-data:
