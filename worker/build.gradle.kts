@@ -8,7 +8,12 @@ plugins {
 }
 
 group = "com.continuum.feature.ai"
-version = "0.0.1"
+val baseVersion = property("featureVersion").toString()
+val isRelease = System.getenv("IS_RELEASE_BUILD")?.toBoolean() ?: false
+version = if (isRelease) baseVersion else "$baseVersion-SNAPSHOT"
+
+// get continuum platform version from root project properties
+val continuumPlatformVersion = property("continuumPlatformVersion").toString()
 
 java {
     toolchain {
@@ -39,7 +44,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     // Worker framework (from GitHub Packages)
-    implementation("com.continuum.core:continuum-worker-springboot-starter:0.0.1")
+    implementation("com.continuum.core:continuum-worker-springboot-starter:$continuumPlatformVersion")
 
     // Feature node modules (local project)
     implementation(project(":features:continuum-feature-unsloth"))

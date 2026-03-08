@@ -6,9 +6,12 @@ plugins {
 }
 
 group = "com.continuum.feature.unsloth"
-val baseVersion = "0.0.1"
+val baseVersion = property("featureVersion").toString()
 val isRelease = System.getenv("IS_RELEASE_BUILD")?.toBoolean() ?: false
 version = if (isRelease) baseVersion else "$baseVersion-SNAPSHOT"
+
+// get continuum platform version from root project properties
+val continuumPlatformVersion = property("continuumPlatformVersion").toString()
 
 java {
     toolchain {
@@ -17,6 +20,7 @@ java {
 }
 
 repositories {
+    mavenLocal()
     mavenCentral()
     maven {
       name = "ContinuumGitHubPackages"
@@ -38,7 +42,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     // Project dependencies
-    implementation("com.continuum.core:continuum-commons:0.0.1")
+    implementation("com.continuum.core:continuum-commons:$continuumPlatformVersion")
 
     // Jackson dependencies
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.2")
