@@ -5,7 +5,7 @@ plugins {
     `maven-publish`
 }
 
-group = "com.continuum.feature.unsloth"
+group = "org.projectcontinuum.feature.unsloth"
 val baseVersion = property("featureVersion").toString()
 val isRelease = System.getenv("IS_RELEASE_BUILD")?.toBoolean() ?: false
 version = if (isRelease) baseVersion else "$baseVersion-SNAPSHOT"
@@ -42,7 +42,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     // Project dependencies
-    implementation("com.continuum.core:continuum-commons:$continuumPlatformVersion")
+    implementation("org.projectcontinuum.core:continuum-commons:$continuumPlatformVersion")
 
     // Jackson dependencies
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.2")

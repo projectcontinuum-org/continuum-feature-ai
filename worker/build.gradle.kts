@@ -7,7 +7,7 @@ plugins {
     id("com.google.cloud.tools.jib") version "3.4.1"
 }
 
-group = "com.continuum.feature.ai"
+group = "org.projectcontinuum.feature.ai"
 val baseVersion = property("featureVersion").toString()
 val isRelease = System.getenv("IS_RELEASE_BUILD")?.toBoolean() ?: false
 version = if (isRelease) baseVersion else "$baseVersion-SNAPSHOT"
@@ -44,7 +44,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
     // Worker framework (from GitHub Packages)
-    implementation("com.continuum.core:continuum-worker-springboot-starter:$continuumPlatformVersion")
+    implementation("org.projectcontinuum.core:continuum-worker-springboot-starter:$continuumPlatformVersion")
 
     // Feature node modules (local project)
     implementation(project(":features:continuum-feature-unsloth"))
