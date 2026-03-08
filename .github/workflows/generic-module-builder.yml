@@ -12,6 +12,13 @@ on:
         required: true
         type: boolean
         default: false
+    secrets:
+      DOCKER_HUB_USERNAME:
+        description: 'Docker Hub username for pushing container images'
+        required: true
+      DOCKER_HUB_PASSWORD:
+        description: 'Docker Hub password for pushing container images'
+        required: true
 jobs:
   build:
     permissions:
@@ -56,8 +63,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MAVEN_REPO_USERNAME: ${{ github.actor }}
           MAVEN_REPO_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-          DOCKER_REPO_USERNAME: ${{ github.actor }}
-          DOCKER_REPO_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Containerize
         if: always()
@@ -75,5 +80,5 @@ jobs:
           IS_RELEASE_BUILD: ${{ inputs.release }}
           GITHUB_USER: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DOCKER_REPO_USERNAME: ${{ github.actor }}
-          DOCKER_REPO_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          DOCKER_REPO_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
+          DOCKER_REPO_PASSWORD: ${{ secrets.DOCKER_HUB_PASSWORD }}
