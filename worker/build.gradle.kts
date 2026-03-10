@@ -24,6 +24,7 @@ java {
 repositories {
     mavenLocal()
     mavenCentral()
+    maven("https://packages.confluent.io/maven/")
 }
 
 dependencies {

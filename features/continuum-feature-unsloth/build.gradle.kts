@@ -34,7 +34,7 @@ dependencies {
     // Kotlin dependencies
     implementation("org.jetbrains.kotlin:kotlin-reflect")
 
-    // Project dependencies
+    // Project continuum dependencies
     implementation("org.projectcontinuum.core:continuum-commons:$continuumPlatformVersion")
 
     // Jackson dependencies
