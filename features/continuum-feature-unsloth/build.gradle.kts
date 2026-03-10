@@ -3,9 +3,10 @@ plugins {
     kotlin("plugin.spring") version "1.9.25"
     id("io.spring.dependency-management") version "1.1.6"
     `maven-publish`
+    id("org.jreleaser")
 }
 
-group = "org.projectcontinuum.feature.unsloth"
+group = "org.projectcontinuum.feature.ai.unsloth"
 val baseVersion = property("featureVersion").toString()
 val isRelease = System.getenv("IS_RELEASE_BUILD")?.toBoolean() ?: false
 version = if (isRelease) baseVersion else "$baseVersion-SNAPSHOT"
@@ -77,16 +78,42 @@ publishing {
             }
         }
     }
+
     repositories {
+      maven {
+        name = "localStaging"
+        url = uri(layout.buildDirectory.dir("staging-deploy"))
+      }
+      if (version.toString().endsWith("-SNAPSHOT")) {
         maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/$repoName")
-            credentials {
-                username = System.getenv("MAVEN_REPO_USERNAME")
-                password = System.getenv("MAVEN_REPO_PASSWORD")
-            }
+          name = "SonatypeSnapshots"
+          url = uri("https://central.sonatype.com/repository/maven-snapshots/")
+          credentials {
+            username = System.getenv("MAVEN_REPO_USERNAME") ?: ""
+            password = System.getenv("MAVEN_REPO_PASSWORD") ?: ""
+          }
         }
+      }
     }
 }
 
-
+jreleaser {
+  signing {
+    active.set(org.jreleaser.model.Active.ALWAYS)
+    armored.set(true)
+  }
+  deploy {
+    maven {
+      mavenCentral {
+        create("sonatype") {
+          active.set(org.jreleaser.model.Active.ALWAYS)
+          url.set("https://central.sonatype.com/api/v1/publisher")
+          stagingRepository("build/staging-deploy")
+          skipPublicationCheck.set(false)
+          retryDelay.set(0)
+          maxRetries.set(0)
+        }
+      }
+    }
+  }
+}
