@@ -1,4 +1,4 @@
-package com.continuum.feature.ai.python
+package org.projectcontinuum.feature.ai.unsloth.python
 
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory

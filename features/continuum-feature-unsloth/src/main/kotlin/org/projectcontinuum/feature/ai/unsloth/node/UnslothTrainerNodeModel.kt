@@ -1,13 +1,13 @@
-package com.continuum.feature.ai.node
+package org.projectcontinuum.feature.ai.node
 
-import com.continuum.core.commons.exception.NodeRuntimeException
-import com.continuum.core.commons.model.ContinuumWorkflowModel
-import com.continuum.core.commons.node.ProcessNodeModel
-import com.continuum.core.commons.prototol.progress.NodeProgress
-import com.continuum.core.commons.prototol.progress.NodeProgressCallback
-import com.continuum.core.commons.utils.NodeInputReader
-import com.continuum.core.commons.utils.NodeOutputWriter
-import com.continuum.feature.ai.python.PythonEnvironmentManager
+import org.projectcontinuum.core.commons.exception.NodeRuntimeException
+import org.projectcontinuum.core.commons.model.ContinuumWorkflowModel
+import org.projectcontinuum.core.commons.node.ProcessNodeModel
+import org.projectcontinuum.core.commons.protocol.progress.NodeProgress
+import org.projectcontinuum.core.commons.protocol.progress.NodeProgressCallback
+import org.projectcontinuum.core.commons.utils.NodeInputReader
+import org.projectcontinuum.core.commons.utils.NodeOutputWriter
+import org.projectcontinuum.feature.ai.unsloth.python.PythonEnvironmentManager
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
@@ -35,7 +35,7 @@ import java.util.UUID
  * - For Unsloth acceleration: unsloth (Linux + CUDA only)
  *
  * Configure the virtual environment path via:
- * - Property: `com.continuum.feature.ai.unsloth-trainer.venv-path`
+ * - Property: `org.projectcontinuum.feature.ai.unsloth-trainer.venv-path`
  *
  * ## Input Format
  * The input Parquet file should contain at least two columns:
@@ -63,7 +63,7 @@ import java.util.UUID
 @Component
 class UnslothTrainerNodeModel(
   private val pythonEnvironmentManager: PythonEnvironmentManager,
-  @param:Value("\${com.continuum.feature.ai.unsloth-trainer.cache-storage-path:./.continuum-cache/workflow-data}")
+  @param:Value("\${org.projectcontinuum.feature.ai.unsloth-trainer.cache-storage-path:./.continuum-cache/workflow-data}")
   private val cacheStoragePath: String
 ) : ProcessNodeModel() {
 

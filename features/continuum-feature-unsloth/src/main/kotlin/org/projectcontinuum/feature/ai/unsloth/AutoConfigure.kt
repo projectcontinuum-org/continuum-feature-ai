@@ -1,4 +1,4 @@
-package com.continuum.feature.ai
+package org.projectcontinuum.feature.ai.unsloth
 
 import org.springframework.context.annotation.ComponentScan
 import org.springframework.context.annotation.Configuration
