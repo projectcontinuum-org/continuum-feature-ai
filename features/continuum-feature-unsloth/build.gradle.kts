@@ -7,6 +7,7 @@ plugins {
 }
 
 group = "org.projectcontinuum.feature.ai.unsloth"
+description = "Continuum Unsloth — a feature for generating code and documentation using large language models"
 val baseVersion = property("featureVersion").toString()
 val isRelease = System.getenv("IS_RELEASE_BUILD")?.toBoolean() ?: false
 version = if (isRelease) baseVersion else "$baseVersion-SNAPSHOT"
