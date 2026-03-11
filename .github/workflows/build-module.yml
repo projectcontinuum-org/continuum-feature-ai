@@ -9,12 +9,8 @@ on:
         type: choice
         options:
           - all
-          - continuum-api-server
-          - continuum-avro-schemas
-          - continuum-commons
-          - continuum-knime-base
-          - continuum-message-bridge
-          - continuum-worker-springboot-starter
+          - features:continuum-feature-unsloth
+          - worker
       release:
         description: 'Publish as a release build (immutable version, no SNAPSHOT suffix)'
         required: true
