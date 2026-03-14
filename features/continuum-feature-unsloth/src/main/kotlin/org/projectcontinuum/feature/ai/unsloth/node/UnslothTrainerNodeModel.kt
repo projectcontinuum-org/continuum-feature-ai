@@ -13,7 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.MediaType
-import org.springframework.stereotype.Component
+import org.projectcontinuum.core.commons.annotation.ContinuumNode
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.nio.file.Files
@@ -60,7 +60,7 @@ import java.util.UUID
  * @author Continuum Team
  * @since 1.0.0
  */
-@Component
+@ContinuumNode
 class UnslothTrainerNodeModel(
   private val pythonEnvironmentManager: PythonEnvironmentManager,
   @param:Value("\${org.projectcontinuum.feature.ai.unsloth-trainer.cache-storage-path:./.continuum-cache/workflow-data}")
