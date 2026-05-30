@@ -1,5 +1,5 @@
 plugins {
-    id("org.projectcontinuum.worker") version "0.0.9"
+    id("org.projectcontinuum.worker") version "0.0.12"
 }
 
 group = "org.projectcontinuum.feature.ai"

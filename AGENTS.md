@@ -8,12 +8,12 @@ AI/ML nodes for Continuum workflows. Currently: LLM fine-tuning with Unsloth + L
 
 ## Modules
 
-- `features/continuum-feature-unsloth/` — Unsloth trainer node (group: `com.continuum.feature.unsloth`)
-- `worker/` — Spring Boot worker app (group: `com.continuum.feature.ai`)
+- `features/continuum-feature-unsloth/` — Unsloth trainer node (group: `org.projectcontinuum.feature.ai.unsloth`)
+- `worker/` — Spring Boot worker app (group: `org.projectcontinuum.feature.ai`)
 
 ## Nodes
 
-All in `features/continuum-feature-unsloth/src/main/kotlin/com/continuum/feature/ai/`:
+All in `features/continuum-feature-unsloth/src/main/kotlin/org/projectcontinuum/feature/ai/unsloth/`:
 
 | Node | Title | Category |
 |------|-------|----------|
@@ -23,12 +23,12 @@ All in `features/continuum-feature-unsloth/src/main/kotlin/com/continuum/feature
 - Input: Parquet table (`training_data` port) with instruction + response columns
 - Output: JSON (`model_info` port) with model path, base model, training config
 - Python execution via auto-managed venv (`python/PythonEnvironmentManager.kt`)
-- Config: `com.continuum.feature.ai.unsloth-trainer.venv-path` (default: `~/.continuum/unsloth-env`)
+- Config: `org.projectcontinuum.feature.ai.unsloth-trainer.venv-path` (default: `~/.continuum/unsloth-env`)
 - Supported models: Phi-4, Mistral 7B, Llama 2/3, Gemma 2, Qwen 2.5, Falcon 7B, any HuggingFace causal LM
 
 ## Dependencies (from GitHub Packages)
 
-`continuum-commons:0.0.1`, `continuum-worker-springboot-starter:0.0.1`
+`continuum-commons:0.0.12`, `continuum-worker-springboot-starter:0.0.12`
 
 ## Build
 
@@ -40,4 +40,4 @@ cd docker && docker compose up -d
 
 ## Stack
 
-Kotlin 2.1.0, Spring Boot 3.4.1, JDK 21, Python 3.10+ (Unsloth, PyTorch, transformers, peft, trl)
+Kotlin 2.2.21, Spring Boot 4.0.6, Jackson 3 (`tools.jackson.*`), JDK 21, Python 3.10+ (Unsloth, PyTorch, transformers, peft, trl)

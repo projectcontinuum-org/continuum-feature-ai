@@ -75,8 +75,8 @@ The Unsloth node executes training via a Python virtual environment that is **au
 
 | Setting | Default |
 |---------|---------|
-| `com.continuum.feature.ai.unsloth-trainer.venv-path` | `~/.continuum/unsloth-env` |
-| `com.continuum.feature.ai.unsloth-trainer.cache-storage-path` | `./.continuum-cache/workflow-data` |
+| `org.projectcontinuum.feature.ai.unsloth-trainer.venv-path` | `~/.continuum/unsloth-env` |
+| `org.projectcontinuum.feature.ai.unsloth-trainer.cache-storage-path` | `./.continuum-cache/workflow-data` |
 
 **Required Python packages** (auto-installed): pyarrow, pandas, datasets, torch, transformers, peft, trl, accelerate, hf_transfer, sentencepiece, protobuf, bitsandbytes, unsloth (Linux + CUDA only).
 

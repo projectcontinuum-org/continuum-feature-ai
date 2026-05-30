@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
  * and all dependencies will be installed before the application continues starting.
  *
  * ## Configuration
- * - `com.continuum.feature.ai.unsloth-trainer.venv-path` — path to the virtual environment
+ * - `org.projectcontinuum.feature.ai.unsloth-trainer.venv-path` — path to the virtual environment
  *
  * ## Behavior
  * - If the venv directory exists and has an activation script, it is assumed to be valid.
@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit
  */
 @Component
 class PythonEnvironmentManager(
-    @Value("\${com.continuum.feature.ai.unsloth-trainer.venv-path:~/.continuum/unsloth-env}")
+    @param:Value("\${org.projectcontinuum.feature.ai.unsloth-trainer.venv-path:~/.continuum/unsloth-env}")
     private val configuredVenvPath: String
 ) {
 
@@ -91,7 +91,7 @@ class PythonEnvironmentManager(
         if (configuredVenvPath.isBlank()) {
             throw PythonEnvironmentException(
                 "Python virtual environment path is not configured. " +
-                "Set 'com.continuum.feature.ai.unsloth-trainer.venv-path' in application properties."
+                "Set 'org.projectcontinuum.feature.ai.unsloth-trainer.venv-path' in application properties."
             )
         }
 

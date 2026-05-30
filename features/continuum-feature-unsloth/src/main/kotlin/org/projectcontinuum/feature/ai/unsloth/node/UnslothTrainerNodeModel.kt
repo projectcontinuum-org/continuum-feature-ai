@@ -1,4 +1,4 @@
-package org.projectcontinuum.feature.ai.node
+package org.projectcontinuum.feature.ai.unsloth.node
 
 import org.projectcontinuum.core.commons.exception.NodeRuntimeException
 import org.projectcontinuum.core.commons.model.ContinuumWorkflowModel
@@ -8,17 +8,19 @@ import org.projectcontinuum.core.commons.protocol.progress.NodeProgressCallback
 import org.projectcontinuum.core.commons.utils.NodeInputReader
 import org.projectcontinuum.core.commons.utils.NodeOutputWriter
 import org.projectcontinuum.feature.ai.unsloth.python.PythonEnvironmentManager
-import com.fasterxml.jackson.core.type.TypeReference
-import com.fasterxml.jackson.databind.ObjectMapper
+import tools.jackson.core.type.TypeReference
+import tools.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.MediaType
 import org.projectcontinuum.core.commons.annotation.ContinuumNode
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 /**
  * Continuum node for fine-tuning Large Language Models using the Unsloth trainer.
@@ -64,12 +66,12 @@ import java.util.UUID
 class UnslothTrainerNodeModel(
   private val pythonEnvironmentManager: PythonEnvironmentManager,
   @param:Value("\${org.projectcontinuum.feature.ai.unsloth-trainer.cache-storage-path:./.continuum-cache/workflow-data}")
-  private val cacheStoragePath: String
+  private val cacheStoragePath: String,
+  private val objectMapper: ObjectMapper
 ) : ProcessNodeModel() {
 
   companion object {
     private val LOGGER = LoggerFactory.getLogger(UnslothTrainerNodeModel::class.java)
-    private val objectMapper = ObjectMapper()
 
     /** Default batch size for reading parquet files in chunks */
     private const val DEFAULT_PARQUET_BATCH_SIZE = 10000
@@ -511,7 +513,7 @@ class UnslothTrainerNodeModel(
 
     // Generate unique output path: {cacheStoragePath}/unsloth/{uuid}
     val modelId = UUID.randomUUID().toString()
-    val outputPath = java.io.File(cacheStoragePath, "unsloth/$modelId").absolutePath
+    val outputPath = File(cacheStoragePath, "unsloth/$modelId").absolutePath
     LOGGER.info("Model will be saved to: $outputPath")
 
     val systemPrompt = properties?.get("systemPrompt")?.toString()
@@ -591,7 +593,7 @@ class UnslothTrainerNodeModel(
         LOGGER.warn("JVM shutting down — destroying training child process")
         process.destroyForcibly()
         try {
-          process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+          process.waitFor(10, TimeUnit.SECONDS)
         } catch (_: InterruptedException) {
           Thread.currentThread().interrupt()
         }
@@ -638,7 +640,7 @@ class UnslothTrainerNodeModel(
       if (process.isAlive) {
         LOGGER.warn("Destroying training child process due to exception: ${e.message}")
         process.destroyForcibly()
-        process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)
+        process.waitFor(10, TimeUnit.SECONDS)
       }
       throw e
     } finally {

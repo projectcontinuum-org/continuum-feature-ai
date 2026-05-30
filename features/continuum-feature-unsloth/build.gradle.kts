@@ -1,5 +1,5 @@
 plugins {
-    id("org.projectcontinuum.feature") version "0.0.9"
+    id("org.projectcontinuum.feature") version "0.0.12"
 }
 
 group = "org.projectcontinuum.feature.ai.unsloth"
@@ -13,7 +13,5 @@ continuum {
     continuumVersion.set(continuumPlatformVersion)
 }
 
-dependencies {
-    // Jackson Kotlin module
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.18.2")
-}
+// Jackson 3 (tools.jackson.module:jackson-module-kotlin) is supplied transitively
+// by the org.projectcontinuum.feature plugin — no explicit Jackson dependency needed.
