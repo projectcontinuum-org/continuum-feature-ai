@@ -63,7 +63,7 @@ import java.util.UUID
 @ContinuumNode
 class UnslothTrainerNodeModel(
   private val pythonEnvironmentManager: PythonEnvironmentManager,
-  @param:Value("\${org.projectcontinuum.feature.ai.unsloth-trainer.cache-storage-path:./.continuum-cache/workflow-data}")
+  @param:Value($$"${org.projectcontinuum.feature.ai.unsloth-trainer.cache-storage-path:./.continuum-cache/workflow-data}")
   private val cacheStoragePath: String
 ) : ProcessNodeModel() {
 

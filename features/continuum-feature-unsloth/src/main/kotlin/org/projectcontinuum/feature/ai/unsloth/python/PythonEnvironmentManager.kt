@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit
  */
 @Component
 class PythonEnvironmentManager(
-    @Value("\${com.continuum.feature.ai.unsloth-trainer.venv-path:~/.continuum/unsloth-env}")
+    @param:Value($$"${com.continuum.feature.ai.unsloth-trainer.venv-path:~/.continuum/unsloth-env}")
     private val configuredVenvPath: String
 ) {
 

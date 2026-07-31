@@ -1,5 +1,5 @@
 plugins {
-    id("org.projectcontinuum.feature") version "0.0.9"
+    id("org.projectcontinuum.feature")
 }
 
 group = "org.projectcontinuum.feature.ai.unsloth"
