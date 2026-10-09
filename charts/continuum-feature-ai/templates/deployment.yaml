@@ -1,0 +1,175 @@
+{{- if .Values.continuum.featureAi.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "continuum-feature-ai.fullname" . }}
+  labels:
+    {{- include "continuum-feature-ai.componentLabels" (dict "context" $ "component" "feature-ai" "extra" .Values.continuum.featureAi.labels.deployment) | nindent 4 }}
+  {{- with (include "continuum-feature-ai.componentAnnotations" (dict "context" $ "extra" .Values.continuum.featureAi.annotations.deployment)) }}
+  annotations:
+    {{- nindent 4 . }}
+  {{- end }}
+spec:
+  {{- if not .Values.continuum.featureAi.autoscaling.enabled }}
+  replicas: {{ .Values.continuum.featureAi.replicas | default 1 }}
+  {{- end }}
+  {{- if eq (.Values.continuum.cacheStorage.accessMode | default "ReadWriteOnce") "ReadWriteOnce" }}
+  strategy:
+    type: Recreate
+  {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: feature-ai
+      {{- include "continuum-feature-ai.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "continuum-feature-ai.componentLabels" (dict "context" $ "component" "feature-ai" "extra" .Values.continuum.featureAi.labels.pod) | nindent 8 }}
+      {{- with (include "continuum-feature-ai.componentAnnotations" (dict "context" $ "extra" .Values.continuum.featureAi.annotations.pod)) }}
+      annotations:
+        {{- nindent 8 . }}
+      {{- end }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: wait-for-kafka
+          image: "{{ .Values.global.initContainer.image.repository }}:{{ .Values.global.initContainer.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy | default "IfNotPresent" }}
+          command:
+            - sh
+            - -c
+            - |
+              KAFKA_BROKER=$(echo "{{ .Values.continuum.infra.kafka.brokerList }}" | tr ',' '\n' | head -1 | sed 's|.*://||')
+              KAFKA_HOST=$(echo $KAFKA_BROKER | cut -d: -f1)
+              KAFKA_PORT=$(echo $KAFKA_BROKER | cut -d: -f2)
+              until nc -z $KAFKA_HOST $KAFKA_PORT; do
+                echo "Waiting for Kafka..."; sleep 5;
+              done
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+        - name: wait-for-temporal
+          image: "{{ .Values.global.initContainer.image.repository }}:{{ .Values.global.initContainer.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy | default "IfNotPresent" }}
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ .Values.continuum.infra.temporal.host }} {{ .Values.continuum.infra.temporal.port }}; do
+                echo "Waiting for Temporal..."; sleep 5;
+              done
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+        - name: wait-for-minio
+          image: "{{ .Values.global.initContainer.image.repository }}:{{ .Values.global.initContainer.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy | default "IfNotPresent" }}
+          command:
+            - sh
+            - -c
+            - |
+              MINIO_HOST=$(echo "{{ .Values.continuum.infra.minio.endpoint }}" | sed 's|http[s]*://||' | cut -d: -f1)
+              MINIO_PORT=$(echo "{{ .Values.continuum.infra.minio.endpoint }}" | sed 's|http[s]*://||' | cut -d: -f2)
+              MINIO_PORT=${MINIO_PORT:-9000}
+              until nc -z $MINIO_HOST $MINIO_PORT; do
+                echo "Waiting for MinIO..."; sleep 5;
+              done
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+        - name: wait-for-api-server
+          image: "{{ .Values.global.initContainer.image.repository }}:{{ .Values.global.initContainer.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy | default "IfNotPresent" }}
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ .Values.continuum.apiServer.host }} {{ .Values.continuum.apiServer.port }}; do
+                echo "Waiting for API Server..."; sleep 5;
+              done
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      containers:
+        - name: feature-ai
+          image: "{{ .Values.continuum.featureAi.image.repository }}:{{ .Values.continuum.featureAi.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy | default "IfNotPresent" }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: CONTINUUM_KAFKA_MAIN_BROKER_LIST
+              value: {{ .Values.continuum.infra.kafka.brokerList | quote }}
+            - name: CONTINUUM_KAFKA_MAIN_SCHEMA_REGISTRY
+              value: {{ .Values.continuum.infra.schemaRegistry.url | quote }}
+            - name: TEMPORAL_SERVER_ADDRESS
+              value: {{ include "continuum-feature-ai.infra.temporal.address" . | quote }}
+            - name: TEMPORAL_NAMESPACE
+              value: {{ .Values.continuum.infra.temporal.namespace | quote }}
+            - name: CONTINUUM_MINIO_ENDPOINT
+              value: {{ .Values.continuum.infra.minio.endpoint | quote }}
+            - name: CONTINUUM_MINIO_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "continuum-feature-ai.minio.secretName" . }}
+                  key: root-user
+            - name: CONTINUUM_MINIO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "continuum-feature-ai.minio.secretName" . }}
+                  key: root-password
+            - name: CONTINUUM_API_SERVER_BASE_URL
+              value: "http://{{ .Values.continuum.apiServer.host }}:{{ .Values.continuum.apiServer.port }}"
+            - name: CONTINUUM_NODE_TASK_QUEUE
+              value: {{ .Values.continuum.featureAi.taskQueue | quote }}
+            - name: CONTINUUM_CACHE_STORAGE_PATH
+              value: "{{ .Values.continuum.cacheStorage.mountPath }}/workflow-data"
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "true"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "true"
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.continuum.featureAi.resources | nindent 12 }}
+          volumeMounts:
+            - name: cache-storage
+              mountPath: {{ .Values.continuum.cacheStorage.mountPath }}
+      volumes:
+        - name: cache-storage
+          persistentVolumeClaim:
+            claimName: {{ include "continuum-feature-ai.fullname" . }}-cache
+      {{- with (.Values.continuum.featureAi.nodeSelector | default .Values.global.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (.Values.continuum.featureAi.tolerations | default .Values.global.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

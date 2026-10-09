@@ -1,0 +1,17 @@
+continuum-feature-ai has been deployed.
+
+This chart is a standalone feature worker. It expects continuum-infra and
+continuum-platform to already be installed in the same namespace.
+
+If continuum-infra was installed under a release name other than
+"continuum-infra", override continuum.infra.* to match its actual service
+names.
+
+If continuum-platform was installed under a release name other than
+"continuum-platform", override:
+  - continuum.secrets.existingMinioSecret (expected: "<platform-release>-minio-secret")
+  - continuum.apiServer.host (expected: "<platform-release>-api-server")
+
+To verify the deployment:
+
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
