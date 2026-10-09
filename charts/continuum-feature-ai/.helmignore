@@ -1,0 +1,16 @@
+.DS_Store
+.git
+.gitignore
+.vscode
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+.project
+.idea
+*.tmproj
+.hg
+.hgignore
+.svn
+values-dev.yaml

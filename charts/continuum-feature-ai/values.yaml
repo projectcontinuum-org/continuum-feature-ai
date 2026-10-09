@@ -1,0 +1,134 @@
+# ============================================================
+# Global settings
+# ============================================================
+global:
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+
+  # Image used by init containers (wait-for-* readiness checks).
+  initContainer:
+    image:
+      repository: busybox
+      tag: "1.36"
+
+  # Default nodeSelector applied to the pod. A non-empty featureAi.nodeSelector overrides this.
+  nodeSelector: {}
+
+  # Default tolerations applied to the pod. A non-empty featureAi.tolerations overrides this.
+  tolerations: []
+
+  # Labels applied to every resource created by this chart's templates,
+  # merged underneath the component's own labels.
+  labels: {}
+
+  # Annotations applied to every resource created by this chart's templates,
+  # merged underneath the component's own annotations.
+  annotations: {}
+
+# ============================================================
+# Continuum — values owned by this chart's own templates
+# ============================================================
+continuum:
+
+  # ============================================================
+  # Infrastructure service references.
+  # These MUST match the release name and service names from the
+  # continuum-infra chart installed in the same namespace. Defaults below
+  # assume continuum-infra was installed under its default release name
+  # "continuum-infra" — override every key under this block if a different
+  # release name was used.
+  # ============================================================
+  infra:
+    temporal:
+      host: continuum-infra-temporal-frontend
+      port: 7233
+      namespace: default
+    kafka:
+      brokerList: "PLAINTEXT://continuum-infra-kafka-0.continuum-infra-kafka-headless:19092"
+    schemaRegistry:
+      url: "http://continuum-infra-schema-registry:8080"
+    minio:
+      endpoint: "http://continuum-infra-minio:9000"
+
+  # ============================================================
+  # MinIO credentials.
+  # This chart does NOT create its own MinIO instance or secret. The
+  # continuum-platform chart already creates a Secret with keys
+  # root-user/root-password in this namespace. Point at it by name.
+  #
+  # IMPORTANT: the exact secret name depends on the RELEASE NAME used to
+  # install continuum-platform. continuum-platform's own secret-name helper
+  # produces "<release-name>-minio-secret", which for the documented default
+  # release name "continuum-platform" is "continuum-platform-minio-secret".
+  # If continuum-platform was installed under a different release name, you
+  # MUST override existingMinioSecret to match.
+  # ============================================================
+  secrets:
+    existingMinioSecret: "continuum-platform-minio-secret"
+    # Fallback inline credentials, only used if existingMinioSecret is set to "".
+    # Not recommended — prefer existingMinioSecret so this chart never
+    # duplicates/diverges from continuum-platform's MinIO credentials.
+    minio:
+      rootUser: ""
+      rootPassword: ""
+
+  # ============================================================
+  # continuum-api-server reachability.
+  # This chart has no visibility into continuum-platform's internal Helm
+  # fullname, so the API Server location is supplied directly as host+port.
+  # Default assumes continuum-platform was installed under release name
+  # "continuum-platform" (producing Service continuum-platform-api-server).
+  # ============================================================
+  apiServer:
+    host: continuum-platform-api-server
+    port: 8080
+
+  # ============================================================
+  # Local cache storage (PVC for temporary workflow data / model artifacts).
+  # Owned entirely by this chart — not shared with continuum-platform or any
+  # other feature chart.
+  # ============================================================
+  cacheStorage:
+    mountPath: /data/continuum-cache
+    size: 5Gi
+    storageClassName: ""
+    accessMode: ReadWriteOnce
+
+  # ============================================================
+  # continuum-feature-ai worker
+  # ============================================================
+  featureAi:
+    enabled: true
+    image:
+      repository: ghcr.io/projectcontinuum/continuum-feature-ai/worker
+      tag: ""                      # defaults to .Chart.AppVersion if unset
+      pullPolicy: IfNotPresent
+    replicas: 1
+    taskQueue: CONTINUUM_FEATURE_AI_TASK_QUEUE
+    # Placeholder resource sizing — AI/ML nodes (model training/inference) are
+    # typically heavier than generic workers. Tune to the actual workload.
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+    labels:
+      deployment: {}
+      pod: {}
+      pvc: {}
+      hpa: {}
+    annotations:
+      deployment: {}
+      pod: {}
+      pvc: {}
+      hpa: {}
