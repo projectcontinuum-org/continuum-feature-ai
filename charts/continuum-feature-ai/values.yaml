@@ -100,7 +100,7 @@ continuum:
   featureAi:
     enabled: true
     image:
-      repository: ghcr.io/projectcontinuum/continuum-feature-ai/worker
+      repository: projectcontinuum/continuum-feature-ai
       tag: ""                      # defaults to .Chart.AppVersion if unset
       pullPolicy: IfNotPresent
     replicas: 1
