@@ -1,0 +1,87 @@
+name: Validate Versions
+
+# Runs on every pull request (no path filter) so it can be made a required status check.
+on:
+  pull_request:
+
+jobs:
+  validate-app-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Chart appVersion must match featureVersion
+        run: |
+          feature_version=$(sed -n 's/^featureVersion[[:space:]]*=[[:space:]]*//p' gradle.properties | tr -d '[:space:]"')
+          if [[ -z "${feature_version}" ]]; then
+            echo "::error file=gradle.properties::featureVersion not found"
+            exit 1
+          fi
+
+          status=0
+          shopt -s nullglob
+          charts=(charts/*/Chart.yaml)
+          if [[ ${#charts[@]} -eq 0 ]]; then
+            echo "::error::No charts/*/Chart.yaml found"
+            exit 1
+          fi
+
+          for chart in "${charts[@]}"; do
+            app_version=$(sed -n 's/^appVersion:[[:space:]]*//p' "${chart}" | tr -d '[:space:]"'"'")
+            if [[ "${app_version}" != "${feature_version}" ]]; then
+              echo "::error file=${chart}::appVersion '${app_version}' does not match featureVersion '${feature_version}' in gradle.properties"
+              status=1
+            else
+              echo "${chart}: appVersion ${app_version} matches featureVersion ${feature_version}"
+            fi
+          done
+          exit ${status}
+
+  require-version-bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      BASE_REF: ${{ github.base_ref }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: featureVersion must be bumped when worker, scheduler or features change
+        run: |
+          dirs=(worker scheduler features)
+
+          changed=$(git diff --name-only "origin/${BASE_REF}...HEAD" -- "${dirs[@]}")
+          if [[ -z "${changed}" ]]; then
+            echo "No changes under ${dirs[*]} - no featureVersion bump required."
+            exit 0
+          fi
+          echo "Changes under ${dirs[*]}:"
+          echo "${changed}" | sed 's/^/  /'
+
+          read_version() {
+            sed -n 's/^featureVersion[[:space:]]*=[[:space:]]*//p' | tr -d '[:space:]"'
+          }
+          new_version=$(read_version < gradle.properties)
+          old_version=$(git show "origin/${BASE_REF}:gradle.properties" | read_version)
+
+          if [[ -z "${new_version}" ]]; then
+            echo "::error file=gradle.properties::featureVersion not found"
+            exit 1
+          fi
+          if [[ -z "${old_version}" ]]; then
+            echo "featureVersion not present on ${BASE_REF}; nothing to compare against."
+            exit 0
+          fi
+
+          highest=$(printf '%s\n%s\n' "${old_version}" "${new_version}" | sort -V | tail -n1)
+          if [[ "${new_version}" == "${old_version}" || "${highest}" != "${new_version}" ]]; then
+            echo "::error file=gradle.properties::Files under ${dirs[*]} changed, so featureVersion must be bumped above ${old_version} (found ${new_version})"
+            exit 1
+          fi
+          echo "featureVersion bumped: ${old_version} -> ${new_version}"
