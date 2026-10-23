@@ -1,46 +1,77 @@
 name: Release Charts
 
+# Charts are published only when a GitHub release is published, never on merge to main.
+# The packaged chart is attached to that same release; gh-pages only holds the Helm repo index.
 on:
-  push:
-    branches:
-      - main
+  release:
+    types: [published]
+
+concurrency:
+  group: release-charts
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ github.event.release.tag_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Configure Git
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-
-      - name: Create gh-pages branch if it does not exist
-        run: |
-          if ! git ls-remote --exit-code origin gh-pages; then
-            echo "Creating gh-pages branch..."
-            git checkout --orphan gh-pages
-            git rm -rf .
-            git commit --allow-empty -m "Initialize gh-pages for Helm chart repository"
-            git push origin gh-pages
-            git checkout main
-          fi
-
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
           version: v3.16.0
 
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0
-        with:
-          charts_dir: charts
-          skip_existing: true
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Check out gh-pages (created if missing)
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null; then
+            git fetch origin gh-pages
+            git worktree add --detach pages origin/gh-pages
+          else
+            git worktree add --detach pages HEAD
+            git -C pages checkout --orphan gh-pages
+            git -C pages rm -rfq .
+          fi
+
+      # A chart version already in the index was published with an earlier release; keep it there.
+      - name: Package charts not yet published
+        id: package
+        run: |
+          mkdir packaged new
+          helm package charts/* --destination packaged
+          for pkg in packaged/*.tgz; do
+            if [[ -f pages/index.yaml ]] && grep -qF "/$(basename "${pkg}")" pages/index.yaml; then
+              echo "$(basename "${pkg}") is already published - skipping"
+            else
+              mv "${pkg}" new/
+            fi
+          done
+          if compgen -G "new/*.tgz" >/dev/null; then
+            echo "has_new=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Attach charts to the release
+        if: steps.package.outputs.has_new == 'true'
+        run: gh release upload "${TAG}" new/*.tgz
+
+      - name: Update Helm repo index
+        if: steps.package.outputs.has_new == 'true'
+        run: |
+          merge=()
+          if [[ -f pages/index.yaml ]]; then
+            merge=(--merge pages/index.yaml)
+          fi
+          helm repo index new --url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}" "${merge[@]}"
+          cp new/index.yaml pages/index.yaml
+          git -C pages add index.yaml
+          git -C pages commit -m "Add charts from release ${TAG}"
+          git -C pages push origin HEAD:gh-pages
