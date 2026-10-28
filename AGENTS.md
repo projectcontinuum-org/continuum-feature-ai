@@ -1,6 +1,6 @@
 # Continuum Feature AI — ML Nodes
 
-> Full ecosystem blueprint: see the [Continuum repo CLAUDE.md](https://github.com/projectcontinuum-org/continuum-platform-core/blob/main/CLAUDE.md) for the complete architecture reference.
+> Full ecosystem blueprint: see the [Continuum repo AGENTS.md](https://github.com/projectcontinuum-org/continuum-platform-core/blob/main/AGENTS.md) for the complete architecture reference.
 
 ## This Repo
 
@@ -26,7 +26,7 @@ All in `features/continuum-feature-unsloth/src/main/kotlin/com/continuum/feature
 - Config: `com.continuum.feature.ai.unsloth-trainer.venv-path` (default: `~/.continuum/unsloth-env`)
 - Supported models: Phi-4, Mistral 7B, Llama 2/3, Gemma 2, Qwen 2.5, Falcon 7B, any HuggingFace causal LM
 
-## Dependencies (from GitHub Packages)
+## Dependencies (from Maven Central)
 
 `continuum-commons:0.0.1`, `continuum-worker-springboot-starter:0.0.1`
 
