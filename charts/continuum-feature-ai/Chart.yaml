@@ -10,6 +10,6 @@ keywords:
   - feature-worker
 maintainers:
   - name: Project Continuum
-home: https://github.com/projectcontinuum
+home: https://github.com/projectcontinuum-org
 annotations:
   continuum.io/requires: "continuum-infra >= 0.1.0, continuum-platform >= 0.1.0"
