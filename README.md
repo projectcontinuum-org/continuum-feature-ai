@@ -84,7 +84,7 @@ The Unsloth node executes training via a Python virtual environment that is **au
 
 ## 📦 Dependencies
 
-Shared libraries from [Continuum](https://github.com/projectcontinuum-org/continuum-platform-core) via GitHub Packages:
+Shared libraries from [Continuum](https://github.com/projectcontinuum-org/continuum-platform-core) from Maven Central:
 
 | Dependency | Purpose |
 |-----------|---------|
@@ -100,15 +100,7 @@ Shared libraries from [Continuum](https://github.com/projectcontinuum-org/contin
 - **JDK 21** — [Eclipse Temurin](https://adoptium.net/) recommended
 - **Python 3.10+** — For the Unsloth training environment
 - **Docker & Docker Compose** — For local infrastructure
-- **GitHub PAT** with `read:packages` scope
 - **(Optional) CUDA GPU** — For Unsloth acceleration
-
-Set environment variables:
-
-```bash
-export GITHUB_USERNAME=your-github-username
-export GITHUB_TOKEN=ghp_your-personal-access-token
-```
 
 ### Run
 
@@ -173,3 +165,7 @@ continuum-feature-ai/
 | [continuum-feature-base](https://github.com/projectcontinuum-org/continuum-feature-base) | Base analytics nodes — data transforms, REST, scripting, anomaly detection |
 | **continuum-feature-ai** (this repo) | AI/ML nodes — LLM fine-tuning with Unsloth + LoRA |
 | [continuum-feature-template](https://github.com/projectcontinuum-org/continuum-feature-template) | Template — scaffold your own custom worker with nodes |
+
+## 📄 License
+
+[Apache 2.0](LICENSE)
