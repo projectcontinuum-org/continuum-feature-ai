@@ -2,7 +2,7 @@ apiVersion: v2
 name: continuum-feature-ai
 description: Project Continuum feature worker — AI/ML Temporal worker nodes
 type: application
-version: 0.1.1
+version: 0.1.2
 appVersion: "0.0.5"
 keywords:
   - continuum
