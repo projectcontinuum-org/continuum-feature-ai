@@ -84,6 +84,15 @@ continuum:
     port: 8080
 
   # ============================================================
+  # continuum-credentials-server reachability (used by nodes that read
+  # stored credentials, e.g. the Claude AI Agent's API token). Same
+  # release-name assumption as apiServer above.
+  # ============================================================
+  credentialsServer:
+    host: continuum-platform-credentials-server
+    port: 8080
+
+  # ============================================================
   # Local cache storage (PVC for temporary workflow data / model artifacts).
   # Owned entirely by this chart — not shared with continuum-platform or any
   # other feature chart.

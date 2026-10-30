@@ -135,6 +135,8 @@ spec:
                   key: root-password
             - name: CONTINUUM_API_SERVER_BASE_URL
               value: "http://{{ .Values.continuum.apiServer.host }}:{{ .Values.continuum.apiServer.port }}"
+            - name: CONTINUUM_CREDENTIALS_SERVER_BASE_URL
+              value: "http://{{ .Values.continuum.credentialsServer.host }}:{{ .Values.continuum.credentialsServer.port }}"
             - name: CONTINUUM_NODE_TASK_QUEUE
               value: {{ .Values.continuum.featureAi.taskQueue | quote }}
             - name: CONTINUUM_CACHE_STORAGE_PATH

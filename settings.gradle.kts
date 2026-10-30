@@ -17,4 +17,5 @@ pluginManagement {
 rootProject.name = "continuum-feature-ai"
 
 include(":features:continuum-feature-unsloth")
+include(":features:continuum-feature-claude")
 include(":worker")

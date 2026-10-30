@@ -10,7 +10,8 @@ import org.springframework.context.annotation.Configuration
  * mechanism when the `continuum-feature-ai` dependency is included in a project.
  *
  * ## Auto-configured Components
- * - [UnslothTrainerNodeModel][com.continuum.feature.ai.node.UnslothTrainerNodeModel] - LLM fine-tuning node
+ * - [UnslothTrainerNodeModel][org.projectcontinuum.feature.ai.node.UnslothTrainerNodeModel] - LLM fine-tuning node
+ * - [PythonEnvironmentManager][org.projectcontinuum.feature.ai.unsloth.python.PythonEnvironmentManager] - venv bootstrap
  *
  * ## Usage
  * Simply include the `continuum-feature-ai` dependency in your project:
@@ -27,6 +28,7 @@ import org.springframework.context.annotation.Configuration
  * @since 1.0.0
  */
 @Configuration
-@ComponentScan(basePackages = ["com.continuum.feature.ai"])
+// The node keeps its original package (org.projectcontinuum.feature.ai.node) so its node ID stays stable.
+@ComponentScan(basePackages = ["org.projectcontinuum.feature.ai.node", "org.projectcontinuum.feature.ai.unsloth"])
 class AutoConfigure
 
