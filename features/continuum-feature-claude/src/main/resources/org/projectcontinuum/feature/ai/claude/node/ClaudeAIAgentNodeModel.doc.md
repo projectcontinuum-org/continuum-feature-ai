@@ -96,9 +96,9 @@ Write and Edit are limited to the agent's working directory.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| *Response Column* | string | Agent's final answer |
-| `agent_is_error` | boolean | Whether the run failed |
-| `agent_error` | string | Error message (empty on success) |
+| *Response Column* | string | Agent's final answer (empty when the run failed) |
+| `agent_is_error` | boolean | Whether the run failed: backend errors (HTTP 4xx/5xx, connection refused, TLS), timeout, max turns or budget, CLI crash |
+| `agent_error` | string | Error message, e.g. `API Error: 500 …` or `Unable to connect to API …` (empty on success) |
 | `agent_num_turns` | int | Turns used |
 | `agent_duration_ms` | long | Run duration |
 | `agent_cost_usd` | double | Cost estimated by Claude Code |

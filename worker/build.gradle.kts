@@ -23,6 +23,6 @@ continuum {
 
 dependencies {
     // Feature node modules (local project)
-    implementation(project(":features:continuum-feature-unsloth"))
+//    implementation(project(":features:continuum-feature-unsloth"))
     implementation(project(":features:continuum-feature-claude"))
 }

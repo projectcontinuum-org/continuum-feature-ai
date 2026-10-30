@@ -43,6 +43,11 @@ class StreamJsonParser(
   private var responseModel: String? = null
   private var result: Map<*, *>? = null
   private var lastApiError: String? = null
+  /**
+   * Text of the latest synthetic assistant message, which the CLI emits instead of a model reply when an
+   * API call fails for good (HTTP 4xx/5xx, connection refused, TLS, …). Cleared by any real model reply.
+   */
+  private var syntheticError: String? = null
 
   /** True once the final `result` event was seen. */
   val hasResult: Boolean get() = result != null
@@ -81,9 +86,18 @@ class StreamJsonParser(
 
   private fun onAssistant(event: Map<*, *>): String? {
     val message = event["message"] as? Map<*, *> ?: return null
-    (message["model"] as? String)?.takeIf { it.isNotBlank() && it != "<synthetic>" }?.let { responseModel = it }
+    val model = message["model"] as? String
+    val content = message["content"] as? List<*> ?: emptyList<Any>()
+    if (event["error"] != null || model == SYNTHETIC_MODEL) {
+      val text = content.mapNotNull { (it as? Map<*, *>)?.get("text") as? String }.joinToString("\n").trim()
+      syntheticError = text.ifBlank { event["error"]?.toString() ?: "API error" }
+      steps += mapOf("type" to "api_error", "error" to (event["error"]?.toString() ?: ""), "text" to syntheticError!!.truncate())
+      return "API error"
+    }
+    syntheticError = null
+    model?.takeIf { it.isNotBlank() }?.let { responseModel = it }
     var progress: String? = null
-    for (block in message["content"] as? List<*> ?: emptyList<Any>()) {
+    for (block in content) {
       val b = block as? Map<*, *> ?: continue
       when (b["type"]) {
         "text" -> (b["text"] as? String)?.takeIf { it.isNotBlank() }?.let {
@@ -129,14 +143,16 @@ class StreamJsonParser(
   fun toResult(fallbackError: String, wallClockMs: Long): AgentResult {
     val model = responseModel ?: initModel ?: ""
     val r = result ?: return AgentResult.failure(
-      error = lastApiError?.let { "$fallbackError (last API error: $it)" } ?: fallbackError,
+      error = (syntheticError ?: lastApiError?.let { "last API error: $it" })?.let { "$fallbackError ($it)" } ?: fallbackError,
       durationMs = wallClockMs,
       model = model
     ).copy(steps = steps.toList())
 
     val usage = r["usage"] as? Map<*, *> ?: emptyMap<String, Any>()
     val subtype = r["subtype"]?.toString() ?: ""
-    val isError = r["is_error"] == true || subtype.startsWith("error")
+    // A failed API call ends the run with the CLI's error text as `result`; older CLI versions do not
+    // always flag that with `is_error`, so the trailing synthetic message counts as an error too.
+    val isError = r["is_error"] == true || subtype.startsWith("error") || syntheticError != null
     val text = r["result"] as? String ?: ""
     val numTurns = (r["num_turns"] as? Number)?.toInt() ?: 0
 
@@ -153,7 +169,8 @@ class StreamJsonParser(
     return AgentResult(
       isError = isError,
       error = if (isError) errorMessage(subtype, text, numTurns, r["api_error_status"]) else "",
-      response = text,
+      // never pass CLI error text off as the agent's answer
+      response = if (isError) "" else text,
       numTurns = numTurns,
       durationMs = (r["duration_ms"] as? Number)?.toLong() ?: wallClockMs,
       costUsd = (r["total_cost_usd"] as? Number)?.toDouble() ?: 0.0,
@@ -170,9 +187,17 @@ class StreamJsonParser(
     "error_max_turns" -> "Reached the maximum number of turns ($numTurns)"
     "error_max_budget_usd" -> "Reached the maximum budget"
     "error_max_structured_output_retries" -> "The agent could not produce output matching the output schema"
-    "error_during_execution" -> text.ifBlank { "Error during execution" }
-    else -> listOfNotNull(apiStatus?.let { "API error $it" }, text.takeIf { it.isNotBlank() })
-      .joinToString(": ").ifBlank { "Agent run failed" }
+    "error_during_execution" -> text.ifBlank { syntheticError ?: "Error during execution" }
+    else -> {
+      val detail = text.ifBlank { syntheticError ?: "" }.trim()
+      when {
+        apiStatus == null -> detail.ifBlank { "Agent run failed" }
+        detail.isBlank() -> "API error $apiStatus"
+        // the CLI's own text usually reads "API Error: 500 …" already
+        detail.contains(apiStatus.toString()) -> detail
+        else -> "API error $apiStatus: $detail"
+      }
+    }
   }
 
   private fun contentText(content: Any?): String = when (content) {
@@ -195,4 +220,9 @@ class StreamJsonParser(
 
   private fun String.truncate(limit: Int = maxStepChars): String =
     if (length <= limit) this else take(limit) + "… [${length - limit} more chars]"
+
+  private companion object {
+    /** Model name the CLI puts on assistant messages it generates itself (API errors, aborts). */
+    const val SYNTHETIC_MODEL = "<synthetic>"
+  }
 }

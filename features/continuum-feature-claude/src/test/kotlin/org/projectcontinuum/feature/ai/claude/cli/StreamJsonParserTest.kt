@@ -81,6 +81,62 @@ class StreamJsonParserTest {
         val result = parse(init, apiError).toResult("unused", 1)
         assertTrue(result.isError)
         assertEquals("API error 401: Invalid API key", result.error)
+        assertEquals("", result.response)
+    }
+
+    // Captured from Claude Code 2.1.204 against a backend answering HTTP 500
+    private val retry500 =
+        """{"type":"system","subtype":"api_retry","attempt":1,"max_retries":1,"retry_delay_ms":557.6,"error_status":500,"error":"server_error","session_id":"s1"}"""
+    private val synthetic500 =
+        """{"type":"assistant","message":{"id":"m1","model":"<synthetic>","role":"assistant","stop_reason":"stop_sequence","type":"message","usage":{"input_tokens":0,"output_tokens":0},"content":[{"type":"text","text":"API Error: 500 {\"error\":\"boom\"}. This is a server-side issue, usually temporary."}]},"parent_tool_use_id":null,"session_id":"s1","error":"server_error"}"""
+    private val result500 =
+        """{"type":"result","subtype":"success","is_error":true,"api_error_status":500,"duration_ms":900,"num_turns":1,"result":"API Error: 500 {\"error\":\"boom\"}. This is a server-side issue, usually temporary.","total_cost_usd":0,"usage":{"input_tokens":0,"output_tokens":0},"permission_denials":[]}"""
+
+    @Test
+    fun `backend 500 is an error and never the response`() {
+        val parser = StreamJsonParser(objectMapper)
+        parser.accept(init)
+        parser.accept(retry500)
+        assertEquals("API error", parser.accept(synthetic500))
+        parser.accept(result500)
+
+        val result = parser.toResult("unused", 1)
+        assertTrue(result.isError)
+        assertEquals("", result.response)
+        assertEquals("API Error: 500 {\"error\":\"boom\"}. This is a server-side issue, usually temporary.", result.error)
+        // the synthetic message is not reported as the model
+        assertEquals("sonnet-latest", result.model)
+        assertEquals(listOf("api_error"), result.steps.map { it["type"] })
+    }
+
+    @Test
+    fun `synthetic error message marks the run failed even without is_error`() {
+        val unflagged = result500
+            .replace("\"is_error\":true", "\"is_error\":false")
+            .replace("\"api_error_status\":500", "\"api_error_status\":null")
+        val result = parse(init, synthetic500, unflagged).toResult("unused", 1)
+        assertTrue(result.isError)
+        assertEquals("", result.response)
+        assertTrue(result.error.startsWith("API Error: 500"), result.error)
+    }
+
+    @Test
+    fun `connection error without result event keeps the cli message`() {
+        val refused =
+            """{"type":"assistant","message":{"model":"<synthetic>","content":[{"type":"text","text":"Unable to connect to API (ECONNREFUSED)"}]},"session_id":"s1","error":"unknown"}"""
+        val result = parse(init, refused).toResult("Claude Code exited with code 1 without a result: no error output", 1)
+        assertTrue(result.isError)
+        assertEquals(
+            "Claude Code exited with code 1 without a result: no error output (Unable to connect to API (ECONNREFUSED))",
+            result.error
+        )
+    }
+
+    @Test
+    fun `a real reply after a synthetic error clears it`() {
+        val result = parse(init, synthetic500, assistantText, success).toResult("unused", 1)
+        assertFalse(result.isError)
+        assertEquals("Example Domain", result.response)
     }
 
     @Test
