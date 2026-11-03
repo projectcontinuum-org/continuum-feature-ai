@@ -52,8 +52,21 @@ class ClaudeCliRunner(
     private const val TERMINATE_GRACE_SECONDS = 5L
     private const val STDERR_TAIL_CHARS = 2000
 
-    /** Inherited worker env vars that must never reach the agent: tokens come only from Continuum credentials. */
-    private val SCRUBBED_ENV = listOf("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN")
+    /**
+     * Only these inherited variables reach the CLI (and so its Bash tool): everything else in the worker's
+     * environment (database URLs, cloud keys, Continuum service tokens, …) is dropped, because the agent can
+     * be talked into printing it. Credentials the agent needs come from the node's Continuum credential.
+     */
+    private val ENV_ALLOW_EXACT = setOf(
+      "PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LANGUAGE", "TZ", "TERM", "TMPDIR", "TEMP", "TMP",
+      "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "no_proxy", "all_proxy",
+      "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS", "NODE_USE_SYSTEM_CA", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"
+    )
+    private const val ENV_ALLOW_PREFIX = "LC_"
+
+    /** The environment handed to the CLI: [inherited] filtered to the allow-list, plus the builder's [extra] vars. */
+    internal fun agentEnvironment(inherited: Map<String, String>, extra: Map<String, String>): Map<String, String> =
+      inherited.filterKeys { it in ENV_ALLOW_EXACT || it.startsWith(ENV_ALLOW_PREFIX) } + extra
   }
 
   @PostConstruct
@@ -100,8 +113,9 @@ class ClaudeCliRunner(
       .redirectInput(promptFile.toFile())
       .redirectError(stderrFile.toFile())
     processBuilder.environment().apply {
-      SCRUBBED_ENV.forEach { remove(it) }
-      putAll(command.env)
+      val sanitized = agentEnvironment(System.getenv(), command.env)
+      clear()
+      putAll(sanitized)
     }
 
     val startedAt = System.currentTimeMillis()

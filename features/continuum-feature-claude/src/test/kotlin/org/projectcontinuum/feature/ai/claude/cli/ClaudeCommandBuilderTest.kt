@@ -47,7 +47,7 @@ class ClaudeCommandBuilderTest {
         assertEquals(configDir.toString(), cmd.env["CLAUDE_CONFIG_DIR"])
         assertEquals("2", cmd.env["CLAUDE_CODE_MAX_RETRIES"])
         assertEquals("1", cmd.env["DISABLE_TELEMETRY"])
-        assertFalse(cmd.env.containsKey("CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"))
+        assertEquals("1", cmd.env["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"])
         // prompt never goes on the command line
         assertFalse(cmd.args.contains("p"))
     }

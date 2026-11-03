@@ -171,7 +171,9 @@ object ClaudeCommandBuilder {
       "CLAUDE_CODE_DISABLE_CLAUDE_MDS" to "1",
       "CLAUDE_CODE_DISABLE_AUTO_MEMORY" to "1",
       "DISABLE_TELEMETRY" to "1",
-      "DISABLE_AUTOUPDATER" to "1"
+      "DISABLE_AUTOUPDATER" to "1",
+      // Bash commands, hooks and MCP servers must not see the API token (prompt injection: `echo $ANTHROPIC_API_KEY`)
+      "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB" to "1"
     )
     val backend = request.backend
     val token = request.token.nonBlank()
