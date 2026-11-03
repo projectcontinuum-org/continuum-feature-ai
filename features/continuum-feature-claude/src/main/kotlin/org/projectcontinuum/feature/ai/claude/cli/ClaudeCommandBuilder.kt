@@ -95,9 +95,14 @@ object ClaudeCommandBuilder {
 
     request.model.nonBlank()?.let { args += listOf("--model", it) }
     request.fallbackModel.nonBlank()?.let { args += listOf("--fallback-model", it) }
-    request.systemPrompt.nonBlank()?.let {
-      val flag = if (request.systemPromptMode == SystemPromptMode.REPLACE) "--system-prompt" else "--append-system-prompt"
-      args += listOf(flag, it)
+    val userSystemPrompt = request.systemPrompt.nonBlank()
+    val replace = request.systemPromptMode == SystemPromptMode.REPLACE
+    if (replace && userSystemPrompt != null) {
+      args += listOf("--system-prompt", userSystemPrompt)
+    }
+    val appended = listOfNotNull(sandboxGuidance(request), userSystemPrompt.takeIf { !replace }).joinToString("\n\n")
+    if (appended.isNotEmpty()) {
+      args += listOf("--append-system-prompt", appended)
     }
     request.outputSchema.nonBlank()?.let { args += listOf("--json-schema", it) }
     mcpConfigFile?.let { args += listOf("--mcp-config", it.toString()) }
@@ -107,6 +112,30 @@ object ClaudeCommandBuilder {
     request.effort.nonBlank()?.let { args += listOf("--effort", it) }
 
     return ClaudeCommand(args = args, env = env(request, configDir))
+  }
+
+  /**
+   * Under `dontAsk` anything outside the working directory (e.g. `/tmp`) is denied, and a denied part fails a whole
+   * `a; b | c` command line. Models do not know that, so tell them up front instead of letting them burn turns.
+   */
+  private fun sandboxGuidance(request: AgentRequest): String? {
+    if (request.tools.isEmpty()) return null
+    val lines = mutableListOf(
+      "You run in a restricted, non-interactive sandbox: nobody can approve anything, and a denied action is final.",
+      "Read and write files only inside the current working directory, using relative paths. Paths outside it " +
+        "(such as /tmp or ~) are denied; save downloads and scratch files in the working directory, or pipe output instead."
+    )
+    if ("Bash" in request.tools) {
+      val allowed = request.bashAllowList.map { it.trim() }.filter { it.isNotEmpty() }
+      lines += if (allowed.isEmpty()) {
+        "Shell commands are not pre-approved; expect most Bash commands to be denied."
+      } else {
+        "Only these shell commands are allowed: ${allowed.joinToString(", ")}. A command line that chains several " +
+          "(with |, ;, && or \$()) is denied if any part is not allowed, so use only these programs, and do not " +
+          "retry a denied command in another form."
+      }
+    }
+    return lines.joinToString(" ")
   }
 
   private fun allowRules(request: AgentRequest): List<String> =

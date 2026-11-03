@@ -150,6 +150,32 @@ class ClaudeCommandBuilderTest {
     }
 
     @Test
+    fun `sandbox guidance is appended before the user system prompt`() {
+        val cmd = build(AgentRequest(prompt = "p", systemPrompt = "Extra", tools = listOf("Bash", "Read"), bashAllowList = listOf("curl", "jq")))
+        val appended = cmd.args.valueOf("--append-system-prompt")!!
+        assertTrue(appended.contains("current working directory"), appended)
+        assertTrue(appended.contains("Only these shell commands are allowed: curl, jq"), appended)
+        assertTrue(appended.endsWith("\n\nExtra"), appended)
+    }
+
+    @Test
+    fun `replace mode keeps the user prompt and still appends sandbox guidance`() {
+        val cmd = build(
+            AgentRequest(prompt = "p", systemPrompt = "Mine", systemPromptMode = SystemPromptMode.REPLACE, tools = listOf("Read"))
+        )
+        assertEquals("Mine", cmd.args.valueOf("--system-prompt"))
+        val appended = cmd.args.valueOf("--append-system-prompt")!!
+        assertTrue(appended.contains("current working directory"), appended)
+        assertFalse(appended.contains("shell commands"), appended)
+    }
+
+    @Test
+    fun `no sandbox guidance without tools`() {
+        val cmd = build(AgentRequest(prompt = "p", tools = emptyList()))
+        assertFalse(cmd.args.contains("--append-system-prompt"))
+    }
+
+    @Test
     fun `backend preset parsing`() {
         assertEquals(BackendPreset.ANTHROPIC, BackendPreset.fromProperty(null))
         assertEquals(BackendPreset.ANTHROPIC, BackendPreset.fromProperty(""))

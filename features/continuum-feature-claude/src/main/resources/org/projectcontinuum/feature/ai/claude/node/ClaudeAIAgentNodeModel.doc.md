@@ -129,6 +129,7 @@ Write and Edit are limited to the agent's working directory.
 
 - The agent runs with `--permission-mode dontAsk`: anything not pre-approved is refused instead of prompting.
 - The **deny list is enforced**. The allow list is **not a sandbox**: Claude Code auto-approves read-only tools and some harmless commands (e.g. `ls`, `date`) even when they are not listed. Commands with side effects outside the working directory are refused unless allowed.
+- **Paths outside the working directory are denied**, even for an allowed command: `grep x /tmp/page.html` is refused while `grep x page.html` runs. A command line chaining several commands (`|`, `;`, `&&`) is refused if any part is refused, so one bad part (such as a `/tmp` path) takes the whole line down. The node tells the agent about both rules in its system prompt; if a run still reports a denial, check `agent_intermediate_steps` for the `permission_denied` entry.
 - The agent runs as the worker's OS user and can reach whatever the worker can reach on the network. Run workers with least privilege and treat input data placed in prompts as untrusted.
 
 ## Tips
