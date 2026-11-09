@@ -10,6 +10,7 @@ on:
         options:
           - all
           - features:continuum-feature-unsloth
+          - features:continuum-feature-claude
           - worker
       publish_to_maven:
         description: 'Publish artifacts to Maven Central'
