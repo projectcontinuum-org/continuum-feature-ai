@@ -1,0 +1,23 @@
+apiVersion: v1
+entries:
+  continuum-feature-ai:
+  - annotations:
+      continuum.io/requires: continuum-infra >= 0.1.0, continuum-platform >= 0.1.0
+    apiVersion: v2
+    appVersion: 0.0.7
+    created: "2026-11-09T11:37:53.372549538Z"
+    description: Project Continuum feature worker — AI/ML Temporal worker nodes
+    digest: 487458846b1d6d3c0d19ad5171d8aaecc53fddb15449adc06a2f70f70a9aee61
+    home: https://github.com/projectcontinuum-org
+    keywords:
+    - continuum
+    - workflow
+    - feature-worker
+    maintainers:
+    - name: Project Continuum
+    name: continuum-feature-ai
+    type: application
+    urls:
+    - https://github.com/projectcontinuum-org/continuum-feature-ai/releases/download/release/0.0.7/continuum-feature-ai-0.1.4.tgz
+    version: 0.1.4
+generated: "2026-11-09T11:37:53.371986154Z"
