@@ -1,4 +1,4 @@
-# continuum-feature-ai 0.0.6 (proposed)
+# continuum-feature-ai 0.0.7 (proposed)
 
 This release adds the **Claude AI Agent** node, which runs an autonomous Claude Code agent once per input row. It also adds the container image and chart changes the node needs, and moves the module to platform `0.0.21` (Spring Boot 4, Jackson 3).
 
@@ -8,7 +8,7 @@ This release adds the **Claude AI Agent** node, which runs an autonomous Claude 
 - **Pluggable backends.** Anthropic (default), Ollama (local and cloud), OpenRouter, LiteLLM or any gateway, and a Custom Anthropic-compatible endpoint.
 - **Worker image with the Claude Code CLI.** A new base image bundles `claude`, `curl`, `jq`, `yq`, `grep`, `git` and Python.
 - **Five example workflows** for the new node.
-- **Platform upgrade:** `continuumPlatformVersion` goes from `0.0.14` to `0.0.21`, and `featureVersion` from `0.0.5` to `0.0.6`.
+- **Platform upgrade:** `continuumPlatformVersion` goes from `0.0.14` to `0.0.21`, and `featureVersion` from `0.0.5` to `0.0.7`.
 
 ## Breaking / attention
 
@@ -99,7 +99,7 @@ All use public APIs and need only the Claude token (credential named `anthropic`
 
 ### Helm chart (`charts/continuum-feature-ai`)
 
-- Chart version `0.1.2` to `0.1.3`, appVersion `0.0.5` to `0.0.6`.
+- Chart version `0.1.2` to `0.1.3`, appVersion `0.0.5` to `0.0.7`.
 - The deployment sets `CONTINUUM_CREDENTIALS_SERVER_BASE_URL`, built from the new `continuum.credentialsServer.host` and `.port` values (defaults `continuum-platform-credentials-server` and `8080`). This assumes the same release-name convention as the existing `apiServer` value, so override it if your credentials server has a different name.
 
 ### continuum-feature-unsloth
