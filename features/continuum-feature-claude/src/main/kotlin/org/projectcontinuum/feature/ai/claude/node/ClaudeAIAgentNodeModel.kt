@@ -76,6 +76,12 @@ class ClaudeAIAgentNodeModel(
     const val COL_MODEL = "agent_model"
     const val COL_STRUCTURED_OUTPUT = "agent_structured_output"
     const val COL_INTERMEDIATE_STEPS = "agent_intermediate_steps"
+
+    /** Columns this node always owns; flattened structured output never writes to them. */
+    private val AGENT_COLUMNS = setOf(
+      COL_IS_ERROR, COL_ERROR, COL_NUM_TURNS, COL_DURATION_MS, COL_COST_USD, COL_INPUT_TOKENS, COL_OUTPUT_TOKENS,
+      COL_MODEL, COL_STRUCTURED_OUTPUT, COL_INTERMEDIATE_STEPS
+    )
   }
 
   final override val inputPorts = mapOf(
@@ -212,7 +218,7 @@ class ClaudeAIAgentNodeModel(
         "flattenStructuredOutput": {
           "type": "boolean",
           "title": "Flatten Structured Output",
-          "description": "Write each top-level field of the structured output to its own column.",
+          "description": "Write each top-level field of the structured output to its own column. Fields named like an input column or an agent_* column are not flattened (they stay in agent_structured_output).",
           "default": false
         },
         "includeIntermediateSteps": {
@@ -470,6 +476,7 @@ class ClaudeAIAgentNodeModel(
 
     nodeOutputWriter.createOutputPortWriter("output").use { writer ->
       var rowNumber = 0L
+      val reportedCollisions = mutableSetOf<String>()
       val processRow = { row: Map<String, Any> ->
         val result = runRow(config, row, rowNumber, totalRows, nodeProgressCallback)
         if (result.isError && config.failOnError) {
@@ -480,7 +487,7 @@ class ClaudeAIAgentNodeModel(
             message = "Agent failed on row $rowNumber: ${result.error}"
           )
         }
-        writer.write(rowNumber, buildOutputRow(config, row, result))
+        writer.write(rowNumber, buildOutputRow(config, row, result, reportedCollisions))
         rowNumber++
       }
 
@@ -522,17 +529,27 @@ class ClaudeAIAgentNodeModel(
 
     val request = config.template.copy(
       prompt = prompt,
-      inputJson = if (config.includeRowAsFile) objectMapper.writeValueAsString(row) else null
+      inputJson = if (config.includeRowAsFile) objectMapper.writeValueAsString(row) else null,
+      collectSteps = config.includeIntermediateSteps
     )
+    // A failing progress report means the activity is cancelled or gone (Temporal throws from the heartbeat):
+    // it must end the node, not be recorded as a row error
+    var progressFailure: Throwable? = null
     val result = try {
       agentRunner.run(request) { message ->
-        progress.report(NodeProgress(progressPercentage = percentage, message = "$label: $message"))
+        try {
+          progress.report(NodeProgress(progressPercentage = percentage, message = "$label: $message"))
+        } catch (e: Throwable) {
+          progressFailure = e
+          throw e
+        }
       }
     } catch (e: NodeRuntimeException) {
       throw e
     } catch (e: InterruptedException) {
       throw e
     } catch (e: Exception) {
+      progressFailure?.let { throw it }
       LOGGER.error("Agent run failed for row $rowNumber", e)
       AgentResult.failure("Agent run failed: ${e.message}")
     }
@@ -542,7 +559,17 @@ class ClaudeAIAgentNodeModel(
     return result
   }
 
-  private fun buildOutputRow(config: Config, row: Map<String, Any>, result: AgentResult): Map<String, Any> =
+  /**
+   * Input columns + the node's own columns (which replace same-named input columns). Flattened structured
+   * output fields never replace an input column or a node column; each such skipped name is logged once
+   * via [reportedCollisions].
+   */
+  private fun buildOutputRow(
+    config: Config,
+    row: Map<String, Any>,
+    result: AgentResult,
+    reportedCollisions: MutableSet<String>
+  ): Map<String, Any> =
     row.toMutableMap().apply {
       this[config.responseColumn] = result.response
       this[COL_IS_ERROR] = result.isError
@@ -558,8 +585,15 @@ class ClaudeAIAgentNodeModel(
         this[COL_STRUCTURED_OUTPUT] = structured ?: emptyMap<String, Any>()
         if (config.flattenStructuredOutput && structured is Map<*, *>) {
           structured.forEach { (key, value) ->
-            val cell = toCellValue(value)
-            if (key != null && cell != null) this[key.toString()] = cell
+            val name = key?.toString() ?: return@forEach
+            val cell = toCellValue(value) ?: return@forEach
+            if (name in row || name in AGENT_COLUMNS || name == config.responseColumn) {
+              if (reportedCollisions.add(name)) {
+                LOGGER.warn("Structured output field '$name' is not flattened: a column of that name already exists")
+              }
+            } else {
+              this[name] = cell
+            }
           }
         }
       }
@@ -614,7 +648,23 @@ class ClaudeAIAgentNodeModel(
     if (unknownTools.isNotEmpty()) {
       throw configError("Unknown tools: ${unknownTools.joinToString()}")
     }
-    val outputSchema = props.string("outputSchema")?.also { validateJsonObject(it, "Output Schema") }
+    val outputSchema = props.string("outputSchema")
+    val outputSchemaFields = outputSchema?.let { validateJsonObject(it, "Output Schema")["properties"] as? Map<*, *> }
+      ?.keys?.mapNotNull { it?.toString() }.orEmpty()
+    val responseColumn = props.string("responseColumn") ?: "response"
+    if (responseColumn in AGENT_COLUMNS) {
+      throw configError("Response Column '$responseColumn' clashes with the node's own column of the same name")
+    }
+    val flattenStructuredOutput = props.boolean("flattenStructuredOutput", false)
+    if (outputSchema != null && flattenStructuredOutput) {
+      val clashes = outputSchemaFields.filter { it in AGENT_COLUMNS || it == responseColumn }
+      if (clashes.isNotEmpty()) {
+        throw configError(
+          "Output Schema field(s) ${clashes.joinToString()} would overwrite the node's own output columns when " +
+            "flattened; rename them or turn off Flatten Structured Output"
+        )
+      }
+    }
     val effort = props.string("effort")?.lowercase()?.also {
       if (it !in EFFORT_LEVELS) throw configError("Unknown effort level: $it")
     }
@@ -646,9 +696,9 @@ class ClaudeAIAgentNodeModel(
       ),
       promptTemplate = props.string("prompt") ?: DEFAULT_PROMPT,
       includeRowAsFile = props.boolean("includeRowAsFile", true),
-      responseColumn = props.string("responseColumn") ?: "response",
+      responseColumn = responseColumn,
       hasOutputSchema = outputSchema != null,
-      flattenStructuredOutput = props.boolean("flattenStructuredOutput", false),
+      flattenStructuredOutput = flattenStructuredOutput,
       includeIntermediateSteps = props.boolean("includeIntermediateSteps", false),
       failOnError = props.string("onError")?.uppercase() == "FAIL"
     )

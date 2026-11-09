@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
+import org.junit.jupiter.api.io.TempDir
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
@@ -25,6 +26,8 @@ import org.projectcontinuum.feature.ai.claude.cli.AgentResult
 import org.projectcontinuum.feature.ai.claude.cli.AgentRunner
 import org.projectcontinuum.feature.ai.claude.cli.BackendPreset
 import tools.jackson.module.kotlin.jacksonObjectMapper
+import java.nio.file.Path
+import java.util.concurrent.CancellationException
 
 class ClaudeAIAgentNodeModelTest {
 
@@ -166,6 +169,80 @@ class ClaudeAIAgentNodeModelTest {
         assertEquals("Example", row["title"])
         assertEquals(3, row["count"])
         assertEquals(listOf(mapOf("type" to "text", "text" to "thinking")), row[ClaudeAIAgentNodeModel.COL_INTERMEDIATE_STEPS])
+        assertTrue(runner.requests.single().collectSteps)
+    }
+
+    @Test
+    fun `steps are not collected unless requested`() {
+        execute(baseProps, listOf(mapOf("id" to 1)))
+        assertFalse(runner.requests.single().collectSteps)
+    }
+
+    @Test
+    fun `flattened fields never overwrite input or agent columns`() {
+        val props = baseProps + mapOf(
+            // the schema does not declare the agent_* fields, the agent returned them anyway
+            "outputSchema" to """{"type":"object","properties":{"drug":{"type":"string"},"summary":{"type":"string"}}}""",
+            "flattenStructuredOutput" to true,
+            "onError" to "CONTINUE"
+        )
+        runner.respond = { r ->
+            if (r.prompt.contains("fail")) AgentResult.failure("boom").copy(structuredOutput = mapOf("agent_error" to "", "agent_is_error" to false))
+            else ok("done", mapOf("drug" to "agent's drug", "agent_error" to "spoofed", "summary" to "s"))
+        }
+        execute(props + ("prompt" to "\${row.p}"), listOf(mapOf("drug" to "ibuprofen", "p" to "ok"), mapOf("drug" to "x", "p" to "fail")))
+
+        val (good, bad) = writtenRows(2)
+        assertEquals("ibuprofen", good["drug"])
+        assertEquals("s", good["summary"])
+        assertEquals("", good[ClaudeAIAgentNodeModel.COL_ERROR])
+        assertEquals("agent's drug", (good[ClaudeAIAgentNodeModel.COL_STRUCTURED_OUTPUT] as Map<*, *>)["drug"])
+        assertEquals(true, bad[ClaudeAIAgentNodeModel.COL_IS_ERROR])
+        assertEquals("boom", bad[ClaudeAIAgentNodeModel.COL_ERROR])
+    }
+
+    @Test
+    fun `output schema fields or response column clashing with agent columns fail fast`() {
+        listOf(
+            baseProps + mapOf(
+                "outputSchema" to """{"type":"object","properties":{"agent_error":{"type":"string"}}}""",
+                "flattenStructuredOutput" to true
+            ),
+            baseProps + mapOf(
+                "outputSchema" to """{"type":"object","properties":{"response":{"type":"string"}}}""",
+                "flattenStructuredOutput" to true
+            ),
+            baseProps + ("responseColumn" to "agent_is_error")
+        ).forEach { props ->
+            val e = assertThrows<NodeRuntimeException>(props.toString()) { execute(props, listOf(mapOf("p" to 1))) }
+            assertFalse(e.isRetriable)
+        }
+        assertTrue(runner.requests.isEmpty())
+    }
+
+    @Test
+    fun `clashing schema fields are fine without flattening`() {
+        runner.respond = { ok("done", mapOf("response" to "inner")) }
+        execute(
+            baseProps + ("outputSchema" to """{"type":"object","properties":{"response":{"type":"string"}}}"""),
+            listOf(mapOf("p" to 1))
+        )
+        val row = writtenRows(1).single()
+        assertEquals("done", row["response"])
+        assertEquals(mapOf("response" to "inner"), row[ClaudeAIAgentNodeModel.COL_STRUCTURED_OUTPUT])
+    }
+
+    @Test
+    fun `an exception from progress reporting stops the node instead of becoming a row error`() {
+        val cancelled = CancellationException("activity cancelled")
+        whenever(mockProgressCallback.report(any<NodeProgress>())).thenAnswer { invocation ->
+            if ((invocation.getArgument<NodeProgress>(0).message ?: "").contains("Bash")) throw cancelled
+        }
+        val thrown = assertThrows<CancellationException> { execute(baseProps, listOf(mapOf("p" to 1), mapOf("p" to 2))) }
+
+        assertEquals(cancelled, thrown)
+        assertEquals(1, runner.requests.size)
+        verify(mockPortWriter, never()).write(any(), any())
     }
 
     @Test
@@ -263,6 +340,54 @@ class ClaudeAIAgentNodeModelTest {
         verify(mockProgressCallback, times(2)).report(captor.capture())
         assertEquals(listOf("Row 1/1: starting agent", "Row 1/1: Bash: curl"), captor.allValues.map { it.message })
         verify(mockProgressCallback).report(100)
+    }
+
+    @Test
+    fun `writes real parquet output that reads back`(@TempDir dir: Path) {
+        runner.respond = { ok("hi ${it.prompt}", mapOf("score" to 0.5, "tags" to listOf("a", "b"))) }
+        val outputWriter = NodeOutputWriter(dir)
+        val props = baseProps + mapOf(
+            "prompt" to "\${row.name}",
+            "outputSchema" to """{"type":"object","properties":{"score":{"type":"number"}}}""",
+            "flattenStructuredOutput" to true,
+            "includeIntermediateSteps" to true
+        )
+        node.execute(props, mapOf("input" to parquetInput(dir, listOf(mapOf("name" to "Alice"), mapOf("name" to "Bob")))), outputWriter, mockProgressCallback, context)
+
+        val rows = readParquet(dir.resolve("output.output.parquet"))
+        assertEquals(listOf("hi Alice", "hi Bob"), rows.map { it["response"] })
+        assertEquals("Alice", rows[0]["name"])
+        assertEquals(false, rows[0][ClaudeAIAgentNodeModel.COL_IS_ERROR])
+        assertEquals(100L, rows[0][ClaudeAIAgentNodeModel.COL_INPUT_TOKENS])
+        assertEquals(0.5, rows[0]["score"])
+        assertEquals(mapOf("score" to 0.5, "tags" to listOf("a", "b")), rows[0][ClaudeAIAgentNodeModel.COL_STRUCTURED_OUTPUT])
+        assertEquals(listOf(mapOf("type" to "text", "text" to "thinking")), rows[0][ClaudeAIAgentNodeModel.COL_INTERMEDIATE_STEPS])
+        val spec = outputWriter.getTableSpec("output").associate { it["name"] to it["contentType"] }
+        assertEquals("application/vnd.continuum.x-boolean", spec[ClaudeAIAgentNodeModel.COL_IS_ERROR])
+        assertEquals("application/vnd.continuum.x-long", spec[ClaudeAIAgentNodeModel.COL_DURATION_MS])
+    }
+
+    @Test
+    fun `empty input table runs no agent and writes an empty table`(@TempDir dir: Path) {
+        val outputWriter = NodeOutputWriter(dir)
+        node.execute(baseProps, mapOf("input" to parquetInput(dir, emptyList())), outputWriter, mockProgressCallback, context)
+
+        assertTrue(runner.requests.isEmpty())
+        assertTrue(readParquet(dir.resolve("output.output.parquet")).isEmpty())
+        verify(mockProgressCallback).report(100)
+    }
+
+    /** Writes [rows] with the real Parquet writer and opens them like the worker does. */
+    private fun parquetInput(dir: Path, rows: List<Map<String, Any>>): NodeInputReader {
+        val inputDir = dir.resolve("in").toFile().apply { mkdirs() }.toPath()
+        NodeOutputWriter(inputDir).createOutputPortWriter("input").use { writer ->
+            rows.forEachIndexed { i, row -> writer.write(i.toLong(), row) }
+        }
+        return NodeInputReader(inputDir.resolve("output.input.parquet"))
+    }
+
+    private fun readParquet(file: Path): List<Map<String, Any>> = NodeInputReader(file).use { reader ->
+        generateSequence { reader.read() }.toList()
     }
 
     private fun createMockReader(rows: List<Map<String, Any>>): NodeInputReader {

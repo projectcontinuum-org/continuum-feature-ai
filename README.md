@@ -127,6 +127,7 @@ claude --version
 |---------|---------|
 | `org.projectcontinuum.feature.ai.claude-agent.claude-cli-path` | `claude` (resolved from `PATH`) |
 | `org.projectcontinuum.feature.ai.claude-agent.workspace-path` | `${java.io.tmpdir}/continuum-claude-agent` |
+| `org.projectcontinuum.feature.ai.claude-agent.max-concurrent-runs` | `4` (CLI processes per worker; further runs wait for a slot) |
 
 ---
 

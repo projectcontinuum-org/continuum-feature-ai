@@ -16,6 +16,7 @@ enum class SystemPromptMode { APPEND, REPLACE }
  * @property outputSchema JSON Schema for structured output, or null
  * @property maxBudgetUsd Spend cap per run; 0 disables it
  * @property inputJson Row serialized as JSON, written to `./input.json`; null skips the file
+ * @property collectSteps Keep intermediate steps (text, tool calls, results) in [AgentResult.steps]
  */
 data class AgentRequest(
   val prompt: String,
@@ -35,7 +36,8 @@ data class AgentRequest(
   val maxBudgetUsd: Double = 0.0,
   val effort: String? = null,
   val timeoutSeconds: Long = 300,
-  val inputJson: String? = null
+  val inputJson: String? = null,
+  val collectSteps: Boolean = true
 )
 
 /** A fully resolved CLI invocation: argv and environment additions. The prompt is fed on stdin by the runner. */

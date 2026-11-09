@@ -175,4 +175,76 @@ class StreamJsonParserTest {
         val content = parser.toResult("e", 0).steps.single()["content"] as String
         assertTrue(content.startsWith("xxxxxxxxxx… [40 more chars]"))
     }
+
+    @Test
+    fun `large tool inputs are truncated`() {
+        val write =
+            """{"type":"assistant","message":{"model":"m","content":[{"type":"tool_use","id":"t","name":"Write","input":{"file_path":"a.txt","content":"${"x".repeat(50)}","edits":[{"old":"${"y".repeat(50)}"}],"replace_all":true,"small":{"a":1}}}]}}"""
+        val parser = StreamJsonParser(objectMapper, maxStepChars = 20)
+        parser.accept(write)
+        @Suppress("UNCHECKED_CAST")
+        val input = parser.toResult("e", 0).steps.single()["input"] as Map<String, Any>
+
+        assertEquals("a.txt", input["file_path"])
+        assertTrue((input["content"] as String).startsWith("x".repeat(20) + "… [30 more chars]"))
+        assertTrue((input["edits"] as String).startsWith("[{\"old\":"), input["edits"].toString())
+        assertEquals(true, input["replace_all"])
+        assertEquals(mapOf("a" to 1), input["small"])
+    }
+
+    @Test
+    fun `steps are capped, denials are kept`() {
+        val denied = success.replace(
+            "\"permission_denials\":[]",
+            """"permission_denials":[{"tool_name":"Bash","tool_use_id":"t9","tool_input":{"command":"rm x"}}]"""
+        )
+        val parser = StreamJsonParser(objectMapper, maxSteps = 2)
+        repeat(5) { parser.accept(assistantText) }
+        parser.accept(denied)
+        val steps = parser.toResult("e", 0).steps
+
+        assertEquals(listOf("text", "text", "truncated", "permission_denied"), steps.map { it["type"] })
+        assertEquals(3, steps[2]["omitted_steps"])
+    }
+
+    @Test
+    fun `no steps are kept when steps are off`() {
+        val parser = StreamJsonParser(objectMapper, maxSteps = 0)
+        parser.accept(init)
+        assertEquals("Bash: curl -s https://example.com", parser.accept(assistantTool))
+        parser.accept(toolResult)
+        parser.accept(success)
+        val result = parser.toResult("e", 0)
+
+        assertFalse(result.isError)
+        assertTrue(result.steps.isEmpty())
+    }
+
+    @Test
+    fun `malformed events are ignored`() {
+        val parser = parse(
+            init,
+            """{"type":"assistant"}""",
+            """{"type":"assistant","message":"oops"}""",
+            """{"type":"assistant","message":{"content":"not a list"}}""",
+            """{"type":"user","message":{"content":[1,null,{"type":"tool_result"}]}}""",
+            """{"type":"result","subtype":5,"num_turns":"many","usage":[],"permission_denials":{}}""",
+            "[1,2]",
+            ""
+        )
+        val result = parser.toResult("e", 0)
+
+        assertFalse(result.isError)
+        assertEquals(0, result.numTurns)
+        assertEquals(listOf("tool_result"), result.steps.map { it["type"] })
+    }
+
+    @Test
+    fun `empty stream uses the fallback error`() {
+        val result = StreamJsonParser(objectMapper).toResult("Claude Code exited with code 1 without a result: no error output", 7)
+
+        assertTrue(result.isError)
+        assertEquals("Claude Code exited with code 1 without a result: no error output", result.error)
+        assertEquals(7L, result.durationMs)
+    }
 }

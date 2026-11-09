@@ -32,13 +32,18 @@ data class AgentResult(
  *
  * Feed every stdout line to [accept]; it returns a short human-readable progress message for tool calls.
  * After the process exits, [toResult] builds the [AgentResult] from the final `result` event.
- * Not thread-safe: use from one thread, or hand over after a happens-before edge (e.g. `Thread.join`).
+ * Not thread-safe: callers sharing one instance across threads must synchronize on it.
+ *
+ * Memory is bounded per run: at most [maxSteps] steps are kept (0 keeps none), each text, tool result and
+ * tool input value is cut to [maxStepChars], and dropped steps are summarized in a trailing `truncated` step.
  */
 class StreamJsonParser(
   private val objectMapper: ObjectMapper,
-  private val maxStepChars: Int = 2000
+  private val maxStepChars: Int = 2000,
+  private val maxSteps: Int = 500
 ) {
   private val steps = mutableListOf<Map<String, Any>>()
+  private var droppedSteps = 0
   private var initModel: String? = null
   private var responseModel: String? = null
   private var result: Map<*, *>? = null
@@ -91,7 +96,7 @@ class StreamJsonParser(
     if (event["error"] != null || model == SYNTHETIC_MODEL) {
       val text = content.mapNotNull { (it as? Map<*, *>)?.get("text") as? String }.joinToString("\n").trim()
       syntheticError = text.ifBlank { event["error"]?.toString() ?: "API error" }
-      steps += mapOf("type" to "api_error", "error" to (event["error"]?.toString() ?: ""), "text" to syntheticError!!.truncate())
+      addStep { mapOf("type" to "api_error", "error" to (event["error"]?.toString() ?: ""), "text" to syntheticError!!.truncate()) }
       return "API error"
     }
     syntheticError = null
@@ -101,17 +106,19 @@ class StreamJsonParser(
       val b = block as? Map<*, *> ?: continue
       when (b["type"]) {
         "text" -> (b["text"] as? String)?.takeIf { it.isNotBlank() }?.let {
-          steps += mapOf("type" to "text", "text" to it.truncate())
+          addStep { mapOf("type" to "text", "text" to it.truncate()) }
         }
         "tool_use" -> {
           val name = b["name"]?.toString() ?: "tool"
           val input = b["input"] as? Map<*, *> ?: emptyMap<String, Any>()
-          steps += mapOf(
-            "type" to "tool_use",
-            "id" to (b["id"]?.toString() ?: ""),
-            "name" to name,
-            "input" to stringKeys(input)
-          )
+          addStep {
+            mapOf(
+              "type" to "tool_use",
+              "id" to (b["id"]?.toString() ?: ""),
+              "name" to name,
+              "input" to boundedInput(input)
+            )
+          }
           val detail = (input["command"] ?: input["file_path"] ?: input["pattern"] ?: input["url"] ?: input["query"])
             ?.toString()?.lineSequence()?.firstOrNull()
           progress = if (detail.isNullOrBlank()) name else "$name: ${detail.truncate(80)}"
@@ -126,12 +133,14 @@ class StreamJsonParser(
     for (block in message["content"] as? List<*> ?: emptyList<Any>()) {
       val b = block as? Map<*, *> ?: continue
       if (b["type"] != "tool_result") continue
-      steps += mapOf(
-        "type" to "tool_result",
-        "tool_use_id" to (b["tool_use_id"]?.toString() ?: ""),
-        "content" to contentText(b["content"]).truncate(),
-        "is_error" to (b["is_error"] == true)
-      )
+      addStep {
+        mapOf(
+          "type" to "tool_result",
+          "tool_use_id" to (b["tool_use_id"]?.toString() ?: ""),
+          "content" to contentText(b["content"]).truncate(),
+          "is_error" to (b["is_error"] == true)
+        )
+      }
     }
     return null
   }
@@ -146,7 +155,7 @@ class StreamJsonParser(
       error = (syntheticError ?: lastApiError?.let { "last API error: $it" })?.let { "$fallbackError ($it)" } ?: fallbackError,
       durationMs = wallClockMs,
       model = model
-    ).copy(steps = steps.toList())
+    ).copy(steps = finalSteps(emptyList()))
 
     val usage = r["usage"] as? Map<*, *> ?: emptyMap<String, Any>()
     val subtype = r["subtype"]?.toString() ?: ""
@@ -162,7 +171,7 @@ class StreamJsonParser(
         "type" to "permission_denied",
         "tool_name" to (m["tool_name"]?.toString() ?: ""),
         "tool_use_id" to (m["tool_use_id"]?.toString() ?: ""),
-        "input" to stringKeys(m["tool_input"] as? Map<*, *> ?: emptyMap<String, Any>())
+        "input" to boundedInput(m["tool_input"] as? Map<*, *> ?: emptyMap<String, Any>())
       )
     }
 
@@ -179,7 +188,7 @@ class StreamJsonParser(
       outputTokens = (usage["output_tokens"] as? Number)?.toLong() ?: 0L,
       model = model,
       structuredOutput = r["structured_output"],
-      steps = steps + denials
+      steps = finalSteps(denials)
     )
   }
 
@@ -214,9 +223,37 @@ class StreamJsonParser(
     else -> content.toString()
   }
 
-  /** Cell maps must not contain nulls or non-String keys; nested values are JSON-serialized as-is. */
-  private fun stringKeys(map: Map<*, *>): Map<String, Any> =
-    map.entries.filter { it.key != null && it.value != null }.associate { it.key.toString() to it.value!! }
+  /** Adds a step unless the cap is reached; [step] is only built when it is kept. */
+  private fun addStep(step: () -> Map<String, Any>) {
+    if (steps.size < maxSteps) steps += step() else droppedSteps++
+  }
+
+  /** Kept steps plus [extra] (permission denials, never dropped), with a marker when steps were dropped. */
+  private fun finalSteps(extra: List<Map<String, Any>>): List<Map<String, Any>> {
+    if (maxSteps <= 0) return emptyList()
+    val marker = if (droppedSteps > 0) listOf(mapOf<String, Any>("type" to "truncated", "omitted_steps" to droppedSteps)) else emptyList()
+    return steps + marker + extra
+  }
+
+  /**
+   * Tool input as a cell map: no nulls or non-String keys. Strings are cut to [maxStepChars]; other values stay
+   * as-is when their JSON is short enough, else they become a cut JSON string (a Write call's `content` can be huge).
+   */
+  private fun boundedInput(map: Map<*, *>): Map<String, Any> =
+    map.entries.filter { it.key != null && it.value != null }.associate { (key, value) ->
+      key.toString() to when (value) {
+        is String -> value.truncate()
+        is Number, is Boolean -> value
+        else -> {
+          val json = try {
+            objectMapper.writeValueAsString(value)
+          } catch (_: Exception) {
+            value.toString()
+          }
+          if (json.length <= maxStepChars) value!! else json.truncate()
+        }
+      }
+    }
 
   private fun String.truncate(limit: Int = maxStepChars): String =
     if (length <= limit) this else take(limit) + "… [${length - limit} more chars]"

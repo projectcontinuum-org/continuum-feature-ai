@@ -72,8 +72,8 @@ Write and Edit are limited to the agent's working directory.
 |----------|---------|-------------|
 | **Response Column** | `response` | Column receiving the agent's final answer |
 | **Output Schema** | — | JSON Schema; the final answer is validated against it and stored in `agent_structured_output` |
-| **Flatten Structured Output** | off | Also write each top-level field of the structured output to its own column |
-| **Include Intermediate Steps** | off | Add `agent_intermediate_steps` with text, tool calls, tool results and permission denials |
+| **Flatten Structured Output** | off | Also write each top-level field of the structured output to its own column. A field named like an input column is not flattened: the input value is kept and the field stays in `agent_structured_output`. Schema fields named like an `agent_*` column or the Response Column are rejected |
+| **Include Intermediate Steps** | off | Add `agent_intermediate_steps` with text, tool calls, tool results and permission denials (first 500 steps; long inputs and outputs truncated) |
 
 ### Limits
 
@@ -97,7 +97,7 @@ Write and Edit are limited to the agent's working directory.
 | Column | Type | Description |
 |--------|------|-------------|
 | *Response Column* | string | Agent's final answer (empty when the run failed) |
-| `agent_is_error` | boolean | Whether the run failed: backend errors (HTTP 4xx/5xx, connection refused, TLS), timeout, max turns or budget, CLI crash |
+| `agent_is_error` | boolean | Whether the run failed: backend errors (HTTP 4xx/5xx, connection refused, TLS), timeout, max turns or budget, CLI crash (including a non-zero exit after an answer, which keeps the response) |
 | `agent_error` | string | Error message, e.g. `API Error: 500 …` or `Unable to connect to API …` (empty on success) |
 | `agent_num_turns` | int | Turns used |
 | `agent_duration_ms` | long | Run duration |
@@ -138,7 +138,8 @@ Write and Edit are limited to the agent's working directory.
 - Put the data the agent needs in `./input.json` instead of the prompt. It keeps prompts short and lets the agent use `jq`.
 - Use **Output Schema** + **Flatten** to turn free-form agent answers into typed columns.
 - Keep **Max Turns** and **Timeout** low while developing prompts. Raise them for complex tasks.
-- Rows run sequentially, so large tables take `rows × average run time`.
+- Rows run sequentially, so large tables take `rows × average run time`. Each worker runs at most `org.projectcontinuum.feature.ai.claude-agent.max-concurrent-runs` agents at once (default 4) across all nodes; others wait and show "waiting for a free agent slot".
+- Cancelling the workflow, a timeout or a failure stops the agent together with every command it started.
 
 ## Requirements
 
