@@ -53,7 +53,7 @@ cd docker && docker compose up -d
 ./gradlew :worker:bootRun   # needs `claude` on PATH; auto-creates Python venv on first run
 ```
 
-Container: `docker build -t <base> docker/agent-worker-base`, then `./gradlew :worker:jib -PworkerBaseImage=<base>`.
+Container: `docker build -t <base> docker/agent-worker-base`, then `./gradlew :worker:jib -PworkerBaseImage=<base>`. CI builds one image per architecture on native amd64/arm64 runners and merges them into a multi-arch tag (`.github/workflows/generic-module-builder.yml`).
 
 ## Stack
 
