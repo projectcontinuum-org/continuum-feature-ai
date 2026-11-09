@@ -1,7 +1,5 @@
 # continuum-feature-ai 0.0.6 (proposed)
 
-Changes on branch `CONTNM-143` (`75d4d3e`) compared with `main` (`249b6dd`): 9 commits, no divergence from main.
-
 This release adds the **Claude AI Agent** node, which runs an autonomous Claude Code agent once per input row. It also adds the container image and chart changes the node needs, and moves the module to platform `0.0.21` (Spring Boot 4, Jackson 3).
 
 ## Highlights
