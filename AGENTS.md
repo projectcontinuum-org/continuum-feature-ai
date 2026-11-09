@@ -11,7 +11,7 @@ AI/ML nodes for Continuum workflows: an autonomous agent built on the Claude Cod
 - `features/continuum-feature-claude/` — Claude AI Agent node (group: `org.projectcontinuum.feature.ai.claude`)
 - `features/continuum-feature-unsloth/` — Unsloth trainer node (group: `org.projectcontinuum.feature.ai.unsloth`)
 - `worker/` — Spring Boot worker app (group: `org.projectcontinuum.feature.ai`)
-- `docker/agent-worker-base/` — worker base image (Claude Code CLI, curl/jq/yq/grep/git, python3); Jib `from` image
+- `docker/agent-worker-base/` — worker base image (Claude Code CLI, curl/jq/yq/grep/git, python3); Jib `from` image. Its tag is `VERSION.txt` (read by `worker/build.gradle.kts` and the release workflow, which only builds a tag not yet on Docker Hub) — bump it whenever the Dockerfile changes
 
 ## Nodes
 

@@ -1,0 +1,61 @@
+name: Worker Base Image
+
+# Worker base image (Claude Code CLI + shell tools + python3) that Jib builds the worker on.
+# Tagged with docker/agent-worker-base/VERSION.txt and only built when that tag is not on Docker Hub yet,
+# so bump VERSION.txt whenever the Dockerfile changes.
+on:
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      DOCKER_HUB_USERNAME:
+        description: 'Docker Hub username for pushing the base image'
+        required: true
+      DOCKER_HUB_PASSWORD:
+        description: 'Docker Hub password for pushing the base image'
+        required: true
+
+jobs:
+  worker-base-image:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read base image tag
+        id: tag
+        run: echo "image=projectcontinuum/continuum-feature-ai-worker-base:$(tr -d '[:space:]' < docker/agent-worker-base/VERSION.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+
+      - name: Check whether base image is already published
+        id: exists
+        run: |
+          if docker manifest inspect "${{ steps.tag.outputs.image }}" > /dev/null 2>&1; then
+            echo "${{ steps.tag.outputs.image }} already published, skipping build"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up QEMU
+        if: steps.exists.outputs.exists != 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.exists.outputs.exists != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push worker base image
+        if: steps.exists.outputs.exists != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/agent-worker-base
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tag.outputs.image }}

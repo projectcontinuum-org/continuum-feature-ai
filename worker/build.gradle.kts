@@ -9,13 +9,16 @@ version = property("featureVersion").toString()
 // get continuum platform version from root project properties
 val continuumPlatformVersion = property("continuumPlatformVersion").toString()
 
+// worker base image tag, shared with .github/workflows/on-release.yml
+val workerBaseImageVersion = rootProject.file("docker/agent-worker-base/VERSION.txt").readText().trim()
+
 continuum {
     continuumVersion.set(continuumPlatformVersion)
     // Base image with the Claude Code CLI, shell tools and python3 (built from docker/agent-worker-base).
     // Override with -PworkerBaseImage=... for local builds.
     jibFromImage.set(
         findProperty("workerBaseImage")?.toString()
-            ?: "projectcontinuum/continuum-feature-ai-worker-base:${project.version}"
+            ?: "projectcontinuum/continuum-feature-ai-worker-base:$workerBaseImageVersion"
     )
     // Container image pushed by `./gradlew :worker:jib` (see .github/workflows/on-release.yml)
     jibToImage.set("projectcontinuum/continuum-feature-ai:${project.version}")
