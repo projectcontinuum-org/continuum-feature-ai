@@ -1,0 +1,8 @@
+spring:
+  temporal:
+    namespace: ${TEMPORAL_NAMESPACE:default}
+    connection:
+      target: ${TEMPORAL_SERVER_ADDRESS:localhost:7233}
+    workersAutoDiscovery:
+      packages:
+        - org.projectcontinuum.core.worker.starter

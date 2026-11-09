@@ -5,7 +5,64 @@ on:
     types: [published]
 
 jobs:
+  # Worker base image (Claude Code CLI + shell tools + python3) that Jib builds the worker on.
+  # Only rebuilt when docker/agent-worker-base differs from main; otherwise the worker reuses :latest.
+  worker-base-image:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    env:
+      BASE_IMAGE: projectcontinuum/continuum-feature-ai-worker-base
+    outputs:
+      image: ${{ steps.changes.outputs.image }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes against main
+        id: changes
+        run: |
+          version=$(grep '^featureVersion=' gradle.properties | cut -d= -f2)
+          if git diff --quiet origin/main HEAD -- docker/agent-worker-base; then
+            echo "docker/agent-worker-base unchanged from main, reusing ${BASE_IMAGE}:latest"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "image=${BASE_IMAGE}:latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "version=${version}" >> "$GITHUB_OUTPUT"
+            echo "image=${BASE_IMAGE}:${version}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up QEMU
+        if: steps.changes.outputs.changed == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.changes.outputs.changed == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: steps.changes.outputs.changed == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+
+      - name: Build and push worker base image
+        if: steps.changes.outputs.changed == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/agent-worker-base
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.BASE_IMAGE }}:${{ steps.changes.outputs.version }}
+            ${{ env.BASE_IMAGE }}:latest
+
   release:
+    needs: worker-base-image
     permissions:
       contents: read
       packages: write
@@ -16,6 +73,9 @@ jobs:
         include:
           # Libraries → Maven Central
           - module: features:continuum-feature-unsloth
+            publish_to_maven: true
+            publish_to_docker_hub: false
+          - module: features:continuum-feature-claude
             publish_to_maven: true
             publish_to_docker_hub: false
           # Services → Docker Hub
@@ -67,7 +127,7 @@ jobs:
 
       - name: Push container image to Docker Hub
         if: matrix.publish_to_docker_hub
-        run: ./gradlew :${{ matrix.module }}:jib --no-daemon
+        run: ./gradlew :${{ matrix.module }}:jib -PworkerBaseImage=${{ needs.worker-base-image.outputs.image }} --no-daemon
         env:
           DOCKER_REPO_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
           DOCKER_REPO_PASSWORD: ${{ secrets.DOCKER_HUB_PASSWORD }}
