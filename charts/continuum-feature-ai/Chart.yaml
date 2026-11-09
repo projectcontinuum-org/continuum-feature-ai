@@ -3,7 +3,7 @@ name: continuum-feature-ai
 description: Project Continuum feature worker — AI/ML Temporal worker nodes
 type: application
 version: 0.1.3
-appVersion: "0.0.6"
+appVersion: "0.0.7"
 keywords:
   - continuum
   - workflow
