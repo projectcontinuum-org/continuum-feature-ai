@@ -1,6 +1,6 @@
 # continuum-feature-ai 0.0.6 (proposed)
 
-Changes on branch `CONTNM-143` compared with `main` (`249b6dd`): 8 commits, no divergence from main.
+Changes on branch `CONTNM-143` (`75d4d3e`) compared with `main` (`249b6dd`): 9 commits, no divergence from main.
 
 This release adds the **Claude AI Agent** node, which runs an autonomous Claude Code agent once per input row. It also adds the container image and chart changes the node needs, and moves the module to platform `0.0.21` (Spring Boot 4, Jackson 3).
 
@@ -14,7 +14,6 @@ This release adds the **Claude AI Agent** node, which runs an autonomous Claude 
 
 ## Breaking / attention
 
-- **The worker no longer includes the Unsloth LLM Trainer node.** In `worker/build.gradle.kts` the `continuum-feature-unsloth` dependency is commented out, so the `worker` image registers only the Claude AI Agent node. The Unsloth module itself is still built, and still published to Maven when the release workflow runs. If the trainer should keep shipping in the worker, restore that line before release.
 - **Platform `0.0.21` is required.** The feature now builds against Spring Boot 4 and Jackson 3 (`tools.jackson.*`), so it cannot be used with workers on older platform versions.
 - **Chart and deployment:** the worker now needs the credentials server address to read the agent's API token (see Helm chart below).
 
@@ -92,6 +91,7 @@ All use public APIs and need only the Claude token (credential named `anthropic`
 ### Worker and image
 
 - **New base image `docker/agent-worker-base`** (`eclipse-temurin:21-jre` plus Claude Code CLI, curl, git, jq, yq, grep, sed, gawk, python3 with venv and pip). It runs as non-root user `continuum` (uid 1000) with auto-update and telemetry disabled.
+- **Worker contents:** the worker depends on both feature modules, so one image registers the Claude AI Agent and the LLM Trainer (Unsloth) nodes.
 - **Worker build:** Jib now builds on the base image `projectcontinuum/continuum-feature-ai-worker-base:<version>` (override with `-PworkerBaseImage=...`) and pushes `projectcontinuum/continuum-feature-ai:<version>`.
 - **Worker config:** a new `worker/src/main/resources/application.yaml` with only the Temporal block (`TEMPORAL_NAMESPACE`, `TEMPORAL_SERVER_ADDRESS`, worker auto-discovery).
 - **Release workflow** (`.github/workflows/on-release.yml`):
@@ -122,7 +122,7 @@ All use public APIs and need only the Claude token (credential named `anthropic`
   - Create a GENERIC credential with a `token` key.
   - Run the worker from the new image, or install the `claude` CLI on `PATH` for local runs.
   - Upgrade the Helm chart to `0.1.3` so the worker can reach the credentials server.
-- **Unsloth users:** the packaged worker no longer registers the LLM Trainer node (see Breaking / attention).
+- **Unsloth users:** the LLM Trainer node is still part of the worker and its node ID is unchanged. The worker image is now built on the new base image, which runs as non-root user `continuum` (uid 1000) and includes Python 3 with venv.
 - **Cost control:** set a Max Budget and Max Turns on the node. Rows run sequentially, so a large table takes (rows x average run time).
 
 **Full Changelog**: compare `main...CONTNM-143` on `projectcontinuum-org/continuum-feature-ai`
