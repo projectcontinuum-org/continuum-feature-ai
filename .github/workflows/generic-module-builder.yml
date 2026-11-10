@@ -46,7 +46,6 @@ jobs:
   build:
     permissions:
       contents: read
-      packages: write
     runs-on: ubuntu-latest
     outputs:
       module-name: ${{ inputs.module-name }}
