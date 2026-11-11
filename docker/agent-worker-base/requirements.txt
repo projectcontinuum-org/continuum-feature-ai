@@ -1,0 +1,14 @@
+# Python packages for the Unsloth LLM Trainer node, pre-installed into the venv baked into the worker base image.
+# Keep in sync with PythonEnvironmentManager.REQUIRED_PACKAGES (features/continuum-feature-unsloth).
+pyarrow
+pandas
+datasets
+torch
+transformers
+peft
+trl
+accelerate
+hf_transfer
+sentencepiece
+protobuf
+bitsandbytes

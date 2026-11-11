@@ -3,7 +3,8 @@
 # Jib layers the worker application on top of this image (see worker/build.gradle.kts).
 # It adds what the AI nodes need at runtime on top of the default eclipse-temurin JRE:
 #   - Claude AI Agent: the Claude Code CLI plus the shell tools the agent is allowed to use
-#   - Unsloth LLM Trainer: python3 + venv (packages are installed into the venv at runtime)
+#   - Unsloth LLM Trainer: python3 + a pre-built venv at /opt/continuum/unsloth-env with all trainer packages
+#     (see requirements.txt), so nothing is pip-installed at worker startup
 #
 # Build locally:
 #   docker build -t projectcontinuum/continuum-feature-ai-worker-base:dev docker/agent-worker-base
@@ -38,8 +39,21 @@ RUN curl -fsSL https://claude.ai/install.sh | bash -s "${CLAUDE_CODE_VERSION}" \
 RUN (userdel -r ubuntu 2>/dev/null || true) \
     && useradd --create-home --uid 1000 --shell /bin/bash continuum
 
+# Unsloth LLM Trainer: pre-install its Python packages into a venv so the worker starts without
+# a pip install. PythonEnvironmentManager sees <venv>/bin/activate and skips creation.
+# The unsloth feature's application.yml reads this env var for its venv-path.
+ENV CONTINUUM_FEATURE_AI_UNSLOTH_VENV_PATH=/opt/continuum/unsloth-env
+RUN mkdir -p /opt/continuum && chown 1000:1000 /opt/continuum
+
 ENV DISABLE_AUTOUPDATER=1 \
     DISABLE_TELEMETRY=1
 
 USER 1000
 WORKDIR /home/continuum
+
+COPY --chown=1000:1000 requirements.txt /tmp/unsloth-requirements.txt
+RUN python3 -m venv "${CONTINUUM_FEATURE_AI_UNSLOTH_VENV_PATH}" \
+    && "${CONTINUUM_FEATURE_AI_UNSLOTH_VENV_PATH}/bin/pip" install --no-cache-dir --upgrade pip \
+    && "${CONTINUUM_FEATURE_AI_UNSLOTH_VENV_PATH}/bin/pip" install --no-cache-dir -r /tmp/unsloth-requirements.txt \
+    && "${CONTINUUM_FEATURE_AI_UNSLOTH_VENV_PATH}/bin/python" -c "import pyarrow, pandas, datasets, torch, transformers, peft, trl, accelerate, hf_transfer, sentencepiece, google.protobuf" \
+    && rm -f /tmp/unsloth-requirements.txt
