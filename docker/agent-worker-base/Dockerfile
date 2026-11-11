@@ -56,4 +56,5 @@ RUN python3 -m venv "${CONTINUUM_FEATURE_AI_UNSLOTH_VENV_PATH}" \
     && "${CONTINUUM_FEATURE_AI_UNSLOTH_VENV_PATH}/bin/pip" install --no-cache-dir --upgrade pip \
     && "${CONTINUUM_FEATURE_AI_UNSLOTH_VENV_PATH}/bin/pip" install --no-cache-dir -r /tmp/unsloth-requirements.txt \
     && "${CONTINUUM_FEATURE_AI_UNSLOTH_VENV_PATH}/bin/python" -c "import pyarrow, pandas, datasets, torch, transformers, peft, trl, accelerate, hf_transfer, sentencepiece, google.protobuf" \
+    && "${CONTINUUM_FEATURE_AI_UNSLOTH_VENV_PATH}/bin/pip" show unsloth unsloth_zoo \
     && rm -f /tmp/unsloth-requirements.txt
