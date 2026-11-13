@@ -279,6 +279,50 @@ class ClaudeAIAgentNodeModelTest {
     }
 
     @Test
+    fun `template cannot instantiate Java classes with new`() {
+        val exploit = "<#assign ex=\"freemarker.template.utility.Execute\"?new()>\${ex(\"id\")}"
+        execute(baseProps + ("prompt" to exploit), listOf(mapOf("p" to 1)))
+
+        assertTrue(runner.requests.isEmpty())
+        val row = writtenRows(1).single()
+        val error = row[ClaudeAIAgentNodeModel.COL_ERROR] as String
+        assertEquals(true, row[ClaudeAIAgentNodeModel.COL_IS_ERROR])
+        assertTrue(error.startsWith("Prompt template rendering failed"), error)
+        assertTrue(error.contains("not allowed"), error)
+        assertFalse(error.contains("uid="), error)
+    }
+
+    /** A non-scalar row value (wrapped as a bean, not a String/Number/Map/List). */
+    class Bean(val name: String)
+
+    @Test
+    fun `template cannot use api or call Java methods on row values`() {
+        execute(baseProps + ("prompt" to "\${row?api.getClass().name}"), listOf(mapOf("p" to 1)))
+        execute(baseProps + ("prompt" to "\${row.b.getClass().name}"), listOf(mapOf("b" to Bean("x"))))
+
+        assertTrue(runner.requests.isEmpty())
+        val errors = writtenRows(2).map { it[ClaudeAIAgentNodeModel.COL_ERROR] as String }
+        assertTrue(errors[0].contains("api_builtin_enabled"), errors[0])
+        assertTrue(errors[1].startsWith("Prompt template rendering failed"), errors[1])
+    }
+
+    @Test
+    fun `bean properties of row values are still readable`() {
+        execute(baseProps + ("prompt" to "hi \${row.b.name}"), listOf(mapOf("b" to Bean("x"))))
+
+        assertEquals(listOf("hi x"), runner.requests.map { it.prompt })
+    }
+
+    @Test
+    fun `restricted template engine still supports normal FreeMarker features`() {
+        val prompt = "<#if row.n gt 1>many<#else>one</#if> \${row.name?upper_case} " +
+            "<#list row.tags as t>\${t}<#sep>,</#list> \${row.missing!\"-\"} \${row?keys?size} \${row.n}"
+        execute(baseProps + ("prompt" to prompt), listOf(mapOf("name" to "ann", "n" to 1000, "tags" to listOf("a", "b"))))
+
+        assertEquals(listOf("many ANN a,b - 3 1000"), runner.requests.map { it.prompt })
+    }
+
+    @Test
     fun `runner exceptions become row errors`() {
         runner.respond = { throw IllegalStateException("disk full") }
         execute(baseProps, listOf(mapOf("p" to 1)))

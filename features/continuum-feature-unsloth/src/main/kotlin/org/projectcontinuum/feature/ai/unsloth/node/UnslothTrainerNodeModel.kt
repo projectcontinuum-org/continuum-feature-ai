@@ -505,31 +505,14 @@ class UnslothTrainerNodeModel(
     LOGGER.info("Training data file: $dataFilePath")
 
     // Extract configuration from properties with defaults
-    val model = properties?.get("model")?.toString() ?: "unsloth/Phi-4"
-    val inputColumn = properties?.get("inputColumn")?.toString() ?: "instruction"
-    val outputColumn = properties?.get("outputColumn")?.toString() ?: "response"
+    val config = TrainingConfig.from(properties, DEFAULT_PARQUET_BATCH_SIZE)
 
     // Generate unique output path: {cacheStoragePath}/unsloth/{uuid}
     val modelId = UUID.randomUUID().toString()
     val outputPath = java.io.File(cacheStoragePath, "unsloth/$modelId").absolutePath
     LOGGER.info("Model will be saved to: $outputPath")
 
-    val systemPrompt = properties?.get("systemPrompt")?.toString()
-    val epochs = (properties?.get("epochs") as? Number)?.toInt() ?: 1
-    val batchSize = (properties?.get("batchSize") as? Number)?.toInt() ?: 2
-    val gradientAccumulation = (properties?.get("gradientAccumulation") as? Number)?.toInt() ?: 4
-    val learningRate = (properties?.get("learningRate") as? Number)?.toDouble() ?: 0.0002
-    val maxSeqLength = (properties?.get("maxSeqLength") as? Number)?.toInt() ?: 2048
-    val loraR = (properties?.get("loraR") as? Number)?.toInt() ?: 16
-    val loraAlpha = (properties?.get("loraAlpha") as? Number)?.toInt() ?: 16
-    val loraDropout = (properties?.get("loraDropout") as? Number)?.toDouble() ?: 0.0
-    val warmupSteps = (properties?.get("warmupSteps") as? Number)?.toInt() ?: 5
-    val weightDecay = (properties?.get("weightDecay") as? Number)?.toDouble() ?: 0.01
-    val seed = (properties?.get("seed") as? Number)?.toInt() ?: 42
-    val saveSteps = (properties?.get("saveSteps") as? Number)?.toInt() ?: 100
-    val loggingSteps = (properties?.get("loggingSteps") as? Number)?.toInt() ?: 10
-    val use4Bit = properties?.get("use4Bit") as? Boolean ?: true
-    val parquetBatchSize = (properties?.get("parquetBatchSize") as? Number)?.toInt() ?: DEFAULT_PARQUET_BATCH_SIZE
+    // Secret: passed to the child only as the HF_TOKEN env var (never argv) and never logged
     val hfToken = properties?.get("hfToken")?.toString()?.takeIf { it.isNotBlank() }
 
     // Get the resolved virtual environment path from PythonEnvironmentManager
@@ -540,48 +523,30 @@ class UnslothTrainerNodeModel(
     val scriptPath = getTrainScriptPath()
     LOGGER.info("Using train script: $scriptPath")
 
-    // Build the command arguments
-    val commandArgs = mutableListOf(
-      "--data", dataFilePath,
-      "--model", model,
-      "--output", outputPath,
-      "--input-column", inputColumn,
-      "--output-column", outputColumn,
-      "--epochs", epochs.toString(),
-      "--batch-size", batchSize.toString(),
-      "--gradient-accumulation", gradientAccumulation.toString(),
-      "--learning-rate", learningRate.toString(),
-      "--max-seq-length", maxSeqLength.toString(),
-      "--lora-r", loraR.toString(),
-      "--lora-alpha", loraAlpha.toString(),
-      "--lora-dropout", loraDropout.toString(),
-      "--warmup-steps", warmupSteps.toString(),
-      "--weight-decay", weightDecay.toString(),
-      "--seed", seed.toString(),
-      "--save-steps", saveSteps.toString(),
-      "--logging-steps", loggingSteps.toString(),
-      "--parquet-batch-size", parquetBatchSize.toString(),
-      "--silent",  // Suppress non-JSON output for cleaner IPC parsing
-      "--ipc"  // Enable IPC mode for progress reporting
-    )
-
-    // Add optional parameters
-    if (!systemPrompt.isNullOrBlank()) {
-      commandArgs.addAll(listOf("--system-prompt", systemPrompt))
-    }
-    if (!use4Bit) {
-      commandArgs.add("--no-4bit")
-    }
-
-    // Build the process with venv activation if specified
     val extraEnv = mutableMapOf<String, String>()
     if (hfToken != null) {
       extraEnv["HF_TOKEN"] = hfToken
       LOGGER.info("HuggingFace token provided — will be used for model downloads")
     }
-    val processBuilder = buildProcessBuilder(resolvedVenvPath, scriptPath, commandArgs, extraEnv)
+    // The venv interpreter is run directly (no bash/cmd), one argv element per argument
+    val command = UnslothTrainerCommand.build(
+      venvPath = resolvedVenvPath,
+      scriptPath = scriptPath,
+      scriptArgs = UnslothTrainerCommand.scriptArguments(config, dataFilePath, outputPath),
+      inherited = System.getenv(),
+      extraEnv = extraEnv,
+      isWindows = UnslothTrainerCommand.isWindows()
+    )
+    val processBuilder = ProcessBuilder(command.args)
+      // Ensure stderr is NOT merged with stdout so we can read them separately
+      .redirectErrorStream(false)
+    processBuilder.environment().apply {
+      clear()
+      putAll(command.env)
+    }
     LOGGER.info("Executing training script with venv: $resolvedVenvPath")
-    LOGGER.debug("Command: {}", processBuilder.command().joinToString(" "))
+    // argv only — the environment (HF_TOKEN) is never logged
+    LOGGER.debug("Command: {}", command.args)
 
     val process = processBuilder.start()
 
@@ -667,17 +632,17 @@ class UnslothTrainerNodeModel(
     // Write output - model information
     val modelInfo = mapOf(
       "model_path" to "$outputPath/final",
-      "base_model" to model,
+      "base_model" to config.model,
       "training_config" to objectMapper.writeValueAsString(
         mapOf(
-          "epochs" to epochs,
-          "batch_size" to batchSize,
-          "learning_rate" to learningRate,
-          "lora_r" to loraR,
-          "lora_alpha" to loraAlpha,
-          "max_seq_length" to maxSeqLength,
-          "input_column" to inputColumn,
-          "output_column" to outputColumn
+          "epochs" to config.epochs,
+          "batch_size" to config.batchSize,
+          "learning_rate" to config.learningRate,
+          "lora_r" to config.loraR,
+          "lora_alpha" to config.loraAlpha,
+          "max_seq_length" to config.maxSeqLength,
+          "input_column" to config.inputColumn,
+          "output_column" to config.outputColumn
         )
       ),
       "status" to "completed"
@@ -686,53 +651,6 @@ class UnslothTrainerNodeModel(
     nodeOutputWriter.createOutputPortWriter("model_info").use { writer ->
       writer.write(0, modelInfo)
     }
-  }
-
-
-  /**
-   * Builds the command to execute the training script.
-   *
-   * The command will be wrapped in a shell that first activates the
-   * virtual environment before running Python.
-   *
-   * @param venvPath Path to the Python virtual environment
-   * @param scriptPath Path to the train.py script
-   * @param args List of arguments to pass to the script
-   * @return ProcessBuilder configured to run the command
-   */
-  private fun buildProcessBuilder(venvPath: String, scriptPath: String, args: List<String>, extraEnv: Map<String, String> = emptyMap()): ProcessBuilder {
-    val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-
-    // Build command that activates venv and runs python
-    val pythonCommand = listOf("python", scriptPath) + args
-    val pythonCommandStr = pythonCommand.joinToString(" ") { arg ->
-      // Quote arguments that contain spaces
-      if (arg.contains(" ")) "\"$arg\"" else arg
-    }
-
-    val processBuilder = if (isWindows) {
-      // Windows: use cmd /c to run activate.bat && python ...
-      val activateScript = "$venvPath\\Scripts\\activate.bat"
-      ProcessBuilder("cmd", "/c", "$activateScript && $pythonCommandStr")
-    } else {
-      // Unix: use bash -c to source activate && python ...
-      val activateScript = "$venvPath/bin/activate"
-      ProcessBuilder("bash", "-c", "source \"$activateScript\" && $pythonCommandStr")
-    }
-
-    // Ensure stderr is NOT merged with stdout so we can read them separately
-    processBuilder.redirectErrorStream(false)
-
-    // Inherit environment variables (needed for CUDA, etc.)
-    processBuilder.environment().putAll(System.getenv())
-
-    // Enable hf_transfer for faster HuggingFace model downloads (Rust-based parallel chunked transfers)
-    processBuilder.environment()["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
-
-    // Apply any extra environment variables (e.g., HF_TOKEN for gated model access)
-    processBuilder.environment().putAll(extraEnv)
-
-    return processBuilder
   }
 
   /**
