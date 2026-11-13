@@ -39,6 +39,7 @@ AI/ML nodes for Continuum workflows: an autonomous agent built on the Claude Cod
 - Output: JSON (`model_info` port) with model path, base model, training config
 - Python execution via auto-managed venv (`unsloth/python/PythonEnvironmentManager.kt`)
 - Config: `com.continuum.feature.ai.unsloth-trainer.venv-path` (default: `~/.continuum/unsloth-env`)
+- In the container the venv is pre-built in the base image (`/opt/continuum/unsloth-env`, packages from `docker/agent-worker-base/requirements.txt`, path set via env `CONTINUUM_FEATURE_AI_UNSLOTH_VENV_PATH`); `PythonEnvironmentManager` finds `bin/activate` and skips pip. Keep `requirements.txt` in sync with `PythonEnvironmentManager.REQUIRED_PACKAGES` and bump `VERSION.txt` when it changes
 - Supported models: Phi-4, Mistral 7B, Llama 2/3, Gemma 2, Qwen 2.5, Falcon 7B, any HuggingFace causal LM
 
 ## Dependencies (from Maven Central)

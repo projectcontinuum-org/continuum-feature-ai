@@ -135,6 +135,8 @@ claude --version
 
 The Unsloth node executes training via a Python virtual environment that is **automatically created at startup** if missing.
 
+In the worker container image the venv is already **pre-built in the base image** at `/opt/continuum/unsloth-env` (packages listed in [`docker/agent-worker-base/requirements.txt`](docker/agent-worker-base/requirements.txt), path wired via `CONTINUUM_FEATURE_AI_UNSLOTH_VENV_PATH`), so startup does not run `pip install`. Local `bootRun` still auto-creates the venv on first run.
+
 | Setting | Default |
 |---------|---------|
 | `com.continuum.feature.ai.unsloth-trainer.venv-path` | `~/.continuum/unsloth-env` |

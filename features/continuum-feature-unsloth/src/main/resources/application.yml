@@ -1,0 +1,6 @@
+com:
+  continuum:
+    feature:
+      ai:
+        unsloth-trainer:
+          venv-path: ${CONTINUUM_FEATURE_AI_UNSLOTH_VENV_PATH:~/.continuum/unsloth-env}

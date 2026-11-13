@@ -1,0 +1,18 @@
+# Python packages for the Unsloth LLM Trainer node, pre-installed into the venv baked into the worker base image.
+# Superset of PythonEnvironmentManager.REQUIRED_PACKAGES (features/continuum-feature-unsloth): adds unsloth,
+# which train.py uses for 4-bit loading and gradient checkpointing when it can be imported (Linux + CUDA).
+# Without it train.py silently falls back to plain transformers, which runs out of GPU memory on large models.
+pyarrow
+pandas
+datasets
+torch
+transformers
+peft
+trl
+accelerate
+hf_transfer
+sentencepiece
+protobuf
+bitsandbytes
+unsloth
+unsloth_zoo

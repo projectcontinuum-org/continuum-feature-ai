@@ -141,6 +141,8 @@ spec:
               value: {{ .Values.continuum.featureAi.taskQueue | quote }}
             - name: CONTINUUM_CACHE_STORAGE_PATH
               value: "{{ .Values.continuum.cacheStorage.mountPath }}/workflow-data"
+            - name: HF_HOME
+              value: "{{ .Values.continuum.cacheStorage.mountPath }}/huggingface"
           livenessProbe:
             exec:
               command:
