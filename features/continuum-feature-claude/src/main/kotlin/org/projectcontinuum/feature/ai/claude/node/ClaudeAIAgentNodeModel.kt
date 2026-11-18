@@ -1,6 +1,9 @@
 package org.projectcontinuum.feature.ai.claude.node
 
+import freemarker.core.TemplateClassResolver
+import freemarker.ext.beans.BeansWrapper
 import freemarker.template.Configuration
+import freemarker.template.DefaultObjectWrapperBuilder
 import freemarker.template.Template
 import freemarker.template.TemplateExceptionHandler
 import org.projectcontinuum.core.commons.annotation.ContinuumNode
@@ -55,6 +58,13 @@ class ClaudeAIAgentNodeModel(
       wrapUncheckedExceptions = true
       fallbackOnNullLoopVariable = false
       numberFormat = "computer"
+      // User-authored templates: no ?new (e.g. freemarker.template.utility.Execute), no ?api, and only
+      // bean properties (no arbitrary Java method calls such as getClass()) on wrapped objects
+      newBuiltinClassResolver = TemplateClassResolver.ALLOWS_NOTHING_RESOLVER
+      isAPIBuiltinEnabled = false
+      objectWrapper = DefaultObjectWrapperBuilder(Configuration.VERSION_2_3_34).apply {
+        exposureLevel = BeansWrapper.EXPOSE_PROPERTIES_ONLY
+      }.build()
     }
 
     const val DEFAULT_PROMPT = "Describe the data in ./input.json"
